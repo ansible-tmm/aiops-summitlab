@@ -1,11 +1,11 @@
 ---
-- name: Deploy a Kafka container with Podman using KRaft mode (Fixed)
+- name: Deploy a Kafka container with Podman using KRaft mode (Final Fix)
   hosts: all
   become: true
   vars:
     kafka_container_name: cp-kafka
     kafka_image: "docker.io/confluentinc/cp-kafka:7.9.0"
-    kafka_memory_limit: "4096m"
+    kafka_memory_limit: "6g"
     kafka_port: 9092
     kafka_controller_port: 9093
     kafka_data_dir: /var/lib/kafka/data
@@ -18,6 +18,11 @@
           - podman
           - python3-podman
         state: present
+
+    - name: Pull Kafka image to ensure availability
+      ansible.builtin.command:
+        cmd: "podman pull {{ kafka_image }}"
+      changed_when: false
 
     - name: Create unique temporary directory
       ansible.builtin.file:
@@ -55,15 +60,19 @@
       register: generated_cluster_id
       changed_when: false
 
+    - name: Trim Generated Cluster ID
+      ansible.builtin.set_fact:
+        kafka_cluster_id: "{{ generated_cluster_id.stdout | trim }}"
+
     - name: Display Generated Cluster ID
       ansible.builtin.debug:
-        msg: "Generated Cluster ID: {{ generated_cluster_id.stdout }}"
+        msg: "Generated Cluster ID: {{ kafka_cluster_id }}"
 
     - name: Format Kafka storage inside the container
       ansible.builtin.command:
         cmd: >
           podman run --rm -v {{ kafka_data_dir }}:/var/lib/kafka/data:Z {{ kafka_image }}
-          /usr/bin/kafka-storage format --cluster-id {{ generated_cluster_id.stdout }} --config /etc/kafka/kraft/server.properties
+          /usr/bin/kafka-storage format --cluster-id {{ kafka_cluster_id }} --config /etc/kafka/kraft/server.properties
       register: format_result
 
     - name: Display Format Result
@@ -76,7 +85,24 @@
         image: "{{ kafka_image }}"
         state: started
         detach: true
-        memory: "{{ kafka_memory_limit }}"
+        memory: "6g"  # Ensuring enough memory for Kafka
+        env:
+          KAFKA_HEAP_OPTS: "-Xms1g -Xmx4g"
+          KAFKA_CLUSTER_ID: "{{ kafka_cluster_id }}"  # Pass the generated Cluster ID
+          KAFKA_PROCESS_ROLES: "broker,controller"
+          KAFKA_NODE_ID: "1"
+          KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+          KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+          KAFKA_LISTENERS: "PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093,PLAINTEXT_INTERNAL://localhost:29092"
+          KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://localhost:29092"
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+          KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+          KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+          KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+          KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+          KAFKA_METADATA_LOG_DIR: "/var/lib/kafka/data"
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
         hostname: kafka
         publish:
           - "{{ kafka_port }}:{{ kafka_port }}"
@@ -99,6 +125,18 @@
       retries: 3
       delay: 5
       until: topic_list.rc == 0
+
+    - name: Debug Kafka Logs if Topic List Fails
+      ansible.builtin.command:
+        cmd: "podman logs {{ kafka_container_name }}"
+      register: kafka_logs
+      when: topic_list.rc != 0
+      changed_when: false
+
+    - name: Display Kafka Logs if Startup Fails
+      ansible.builtin.debug:
+        var: kafka_logs.stdout_lines
+      when: topic_list.rc != 0
 
     - name: Display Kafka Topics
       ansible.builtin.debug:
