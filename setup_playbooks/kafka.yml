@@ -94,7 +94,8 @@
     - name: Restart Kafka container if format was needed
       containers.podman.podman_container:
         name: "{{ kafka_container_name }}"
-        state: restarted
+        state: started
+        force_restart: true
       when: format_result.stderr is defined and format_result.stderr != ''
 
     - name: Wait for Kafka to initialize after restart
