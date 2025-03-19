@@ -1,0 +1,98 @@
+---
+- name: Deploy a Kafka container with Podman using KRaft mode
+  hosts: all
+  become: true
+  vars:
+    kafka_container_name: cp-kafka
+    kafka_image: "confluentinc/cp-kafka:7.0.1"
+    kafka_memory_limit: "2049m"
+    kafka_port: 9092
+    kafka_controller_port: 9093
+    kafka_data_dir: /var/lib/kafka/data
+    # Generate a random cluster ID - in production you should use a fixed value
+    kafka_cluster_id: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+    kafka_env_vars:
+      # Enable KRaft mode
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "1"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      # KRaft requires this to be initialized
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_INTERNAL://0.0.0.0:29092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://broker:9092,PLAINTEXT_INTERNAL://broker:29092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      # These settings are still needed
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      # Required for early KRaft adoption
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      # Format the directories for KRaft
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      # Set cluster ID environment variable
+      CLUSTER_ID: "{{ kafka_cluster_id }}"
+  tasks:
+    - name: Ensure required packages are installed
+      ansible.builtin.package:
+        name:
+          - podman
+          - python3-podman
+        state: present
+
+    - name: Create data directory for Kafka
+      ansible.builtin.file:
+        path: "{{ kafka_data_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create Podman network if it doesn't exist
+      containers.podman.podman_network:
+        name: kafka-network
+        state: present
+
+    - name: Remove existing Kafka container if it exists
+      containers.podman.podman_container:
+        name: "{{ kafka_container_name }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Start Kafka container with KRaft mode
+      containers.podman.podman_container:
+        name: "{{ kafka_container_name }}"
+        image: "{{ kafka_image }}"
+        state: started
+        detach: true
+        memory: "{{ kafka_memory_limit }}"
+        env: "{{ kafka_env_vars }}"
+        hostname: broker
+        publish:
+          - "{{ kafka_port }}:{{ kafka_port }}"
+          - "{{ kafka_controller_port }}:{{ kafka_controller_port }}"
+          - "29092:29092"
+        restart_policy: always
+        network: kafka-network
+        volume:
+          - "{{ kafka_data_dir }}:/var/lib/kafka/data:Z"
+
+    # Initialize KRaft metadata if this is the first start
+    - name: Wait for Kafka container to be ready
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Format KRaft storage directories
+      containers.podman.podman_container_exec:
+        name: "{{ kafka_container_name }}"
+        command: bash -c "if [ ! -f /var/lib/kafka/data/__cluster_metadata-0/meta.properties ]; then kafka-storage.sh format -t {{ kafka_cluster_id }} -c /etc/kafka/kraft/server.properties; fi"
+      register: format_result
+      ignore_errors: yes
+
+    - name: Display format result
+      ansible.builtin.debug:
+        var: format_result
+
+    - name: Restart Kafka container if format was needed
+      containers.podman.podman_container:
+        name: "{{ kafka_container_name }}"
+        state: started
+        force_restart: true
+      when: format_result.stderr is defined and format_result.stderr != ''
