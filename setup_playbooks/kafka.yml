@@ -99,7 +99,7 @@
     - name: Format KRaft storage directories
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "mkdir -p /tmp/kraft-config && echo 'process.roles=broker,controller' > /tmp/kraft-config/kraft.properties && echo 'node.id=1' >> /tmp/kraft-config/kraft.properties && echo 'controller.quorum.voters=1@localhost:9093' >> /tmp/kraft-config/kraft.properties && kafka-storage format -t {{ kafka_cluster_id }} -c /tmp/kraft-config/kraft.properties"
+        command: bash -c "mkdir -p /tmp/kraft-config && echo 'process.roles=broker,controller' > /tmp/kraft-config/kraft.properties && echo 'node.id=1' >> /tmp/kraft-config/kraft.properties && echo 'controller.quorum.voters=1@localhost:9093' >> /tmp/kraft-config/kraft.properties && echo 'controller.listener.names=CONTROLLER' >> /tmp/kraft-config/kraft.properties && echo 'listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093' >> /tmp/kraft-config/kraft.properties && kafka-storage format -t {{ kafka_cluster_id }} -c /tmp/kraft-config/kraft.properties"
       register: format_result
       ignore_errors: yes
       when: "dir_check.stdout is defined and '__cluster_metadata-0' not in dir_check.stdout"
@@ -133,7 +133,7 @@
     - name: Check Kafka logs to verify KRaft mode
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "grep -i 'kraft\|controller' /var/log/kafka/server.log || grep -i 'kraft\|controller' /var/log/kafka/kafka.log || echo 'Log file not found in expected location'"
+        command: bash -c "grep -i 'kraft\|controller' /var/log/kafka/server.log 2>/dev/null || grep -i 'kraft\|controller' /var/log/kafka/kafka.log 2>/dev/null || find / -name 'server.log' -o -name 'kafka.log' | xargs grep -i 'kraft\|controller' 2>/dev/null || echo 'No KRaft-related logs found'"
       register: kafka_log_check
       ignore_errors: yes
 
