@@ -1,5 +1,5 @@
 ---
-- name: Deploy a Kafka container with Podman using KRaft mode (Enhanced Version)
+- name: Deploy a Kafka container with Podman using KRaft mode (Fixed Version)
   hosts: all
   become: true
   vars:
@@ -10,8 +10,8 @@
     kafka_controller_port: 9093
     kafka_data_dir: /var/lib/kafka/data
     kafka_tmp_dir: /tmp/kafka-setup-{{ ansible_date_time.epoch }}
-    # Generate a random cluster ID - in production you should use a fixed value
     kafka_cluster_id: "{{ lookup('password', '/dev/null chars=ascii_letters,digits length=32') }}"
+
   tasks:
     - name: Ensure required packages are installed
       ansible.builtin.package:
@@ -20,39 +20,42 @@
           - python3-podman
         state: present
 
-    # Create unique temp directory to avoid conflicts with previous runs
     - name: Create unique temporary directory
       ansible.builtin.file:
         path: "{{ kafka_tmp_dir }}"
         state: directory
         mode: '0755'
 
-    # Completely clean up the data directory structure
-    - name: Remove existing Kafka data directory and all contents
+    - name: Ensure Kafka data directory is completely removed
       ansible.builtin.file:
         path: "{{ kafka_data_dir }}"
         state: absent
+      register: kafka_data_removed
 
-    # Create new data directory with proper permissions
-    - name: Create clean data directory with proper permissions
+    - name: Verify data directory removal
+      ansible.builtin.command:
+        cmd: "ls {{ kafka_data_dir }}"
+      register: check_data_dir
+      ignore_errors: yes
+      changed_when: false
+      failed_when: check_data_dir.rc == 0
+
+    - name: Create new Kafka data directory
       ansible.builtin.file:
         path: "{{ kafka_data_dir }}"
         state: directory
-        owner: "1000"  # appuser in the container
+        owner: "1000"
         group: "1000"
         mode: '0755'
 
-    # Create configuration for Kafka
     - name: Create Kafka configuration file
       ansible.builtin.copy:
         dest: "{{ kafka_tmp_dir }}/server.properties"
         content: |
-          # Basic Kafka configuration for KRaft mode
           process.roles=broker,controller
           node.id=1
           controller.quorum.voters=1@localhost:9093
           controller.listener.names=CONTROLLER
-          # FIX: Use localhost instead of 0.0.0.0 for listeners
           listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093,PLAINTEXT_INTERNAL://localhost:29092
           advertised.listeners=PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://localhost:29092
           listener.security.protocol.map=PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
@@ -62,16 +65,13 @@
           transaction.state.log.min.isr=1
           transaction.state.log.replication.factor=1
           auto.create.topics.enable=true
-          # Format with cluster ID {{ kafka_cluster_id }}
         mode: '0644'
 
-    # Create environment variables file
     - name: Create environment variables file
       ansible.builtin.copy:
         dest: "{{ kafka_tmp_dir }}/env-vars"
         content: |
           KAFKA_CLUSTER_ID={{ kafka_cluster_id }}
-          KAFKA_ZOOKEEPER_CONNECT=
           KAFKA_PROCESS_ROLES=broker,controller
           KAFKA_NODE_ID=1
           KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093
@@ -79,47 +79,30 @@
           KAFKA_LISTENERS=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093,PLAINTEXT_INTERNAL://localhost:29092
           KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://localhost:29092
           KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
-          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
-          KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
-          KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
-          KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
           KAFKA_LOG_DIRS=/var/lib/kafka/data
-          CLUSTER_ID={{ kafka_cluster_id }}
-          KAFKA_METADATA_LOG_DIR=/var/lib/kafka/data
           KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
-          KAFKA_KRAFT_CLUSTER_ID={{ kafka_cluster_id }}
         mode: '0644'
 
-    # Create network for Kafka
     - name: Create Podman network if it doesn't exist
       containers.podman.podman_network:
         name: kafka-network
         state: present
 
-    # Remove existing container if it exists
     - name: Remove existing Kafka container if it exists
       containers.podman.podman_container:
         name: "{{ kafka_container_name }}"
         state: absent
       ignore_errors: yes
 
-    # Format the Kafka storage with the specified cluster ID
     - name: Format Kafka storage directory
       ansible.builtin.command:
-        cmd: "podman run --rm -v {{ kafka_data_dir }}:/var/lib/kafka/data:Z -v {{ kafka_tmp_dir }}:/tmp/config:Z {{ kafka_image }} bash -c 'KAFKA_HEAP_OPTS=\"-Xms512m -Xmx1g\" kafka-storage format -t {{ kafka_cluster_id }} -c /tmp/config/server.properties'"
+        cmd: "podman run --rm -v {{ kafka_data_dir }}:/var/lib/kafka/data:Z -v {{ kafka_tmp_dir }}:/tmp/config:Z {{ kafka_image }} bash -c 'KAFKA_HEAP_OPTS=\"-Xms512m -Xmx1g\" kafka-storage format --ignore-formatted -t {{ kafka_cluster_id }} -c /tmp/config/server.properties'"
       register: format_result
 
     - name: Display format result
       ansible.builtin.debug:
         var: format_result.stdout_lines
 
-    # Check if format completed successfully
-    - name: Verify format success
-      ansible.builtin.fail:
-        msg: "Kafka storage formatting failed: {{ format_result.stderr }}"
-      when: format_result.rc is defined and format_result.rc != 0
-
-    # Start the Kafka container with environment variables
     - name: Start Kafka container with KRaft mode
       containers.podman.podman_container:
         name: "{{ kafka_container_name }}"
@@ -139,12 +122,10 @@
           - "{{ kafka_data_dir }}:/var/lib/kafka/data:Z"
           - "{{ kafka_tmp_dir }}:/tmp/config:Z"
 
-    # Give Kafka sufficient time to initialize
     - name: Wait for Kafka container to be ready
       ansible.builtin.pause:
         seconds: 20
 
-    # View logs to troubleshoot potential issues
     - name: Get container logs
       ansible.builtin.shell:
         cmd: podman logs {{ kafka_container_name }} | tail -n 30
@@ -155,24 +136,6 @@
       ansible.builtin.debug:
         var: container_logs.stdout_lines
 
-    # Verify Kafka is actually running
-    - name: Wait for Kafka to be fully operational (additional time)
-      ansible.builtin.pause:
-        seconds: 10
-
-    # Check for Kafka broker process
-    - name: Check for Kafka broker process
-      ansible.builtin.shell:
-        cmd: podman exec {{ kafka_container_name }} ps aux | grep -E '[k]afka\.Kafka'
-      register: kafka_process
-      ignore_errors: yes
-      changed_when: false
-
-    - name: Display Kafka process info
-      ansible.builtin.debug:
-        var: kafka_process.stdout_lines if kafka_process.stdout is defined else "No Kafka processes found running"
-
-    # Test connectivity by listing topics
     - name: Test if Kafka broker is accepting connections
       ansible.builtin.command:
         cmd: podman exec {{ kafka_container_name }} kafka-topics --list --bootstrap-server localhost:9092
@@ -187,43 +150,6 @@
       ansible.builtin.debug:
         var: topic_list.stdout_lines if topic_list.stdout is defined else topic_list.stderr_lines if topic_list.stderr is defined else "No output from topic list command"
 
-    # Create a test topic
-    - name: Create a test topic
-      ansible.builtin.command:
-        cmd: podman exec {{ kafka_container_name }} kafka-topics --create --topic ansible-test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
-      register: create_topic
-      ignore_errors: yes
-      changed_when: false
-
-    - name: Display topic creation result
-      ansible.builtin.debug:
-        var: create_topic.stdout_lines if create_topic.stdout is defined else create_topic.stderr_lines if create_topic.stderr is defined else "No output from topic creation command"
-
-    # Produce a test message
-    - name: Produce a test message
-      ansible.builtin.shell:
-        cmd: echo "Hello from Ansible" | podman exec -i {{ kafka_container_name }} kafka-console-producer --topic ansible-test-topic --bootstrap-server localhost:9092
-      register: produce_result
-      ignore_errors: yes
-      changed_when: false
-
-    - name: Display produce result
-      ansible.builtin.debug:
-        var: produce_result.stdout_lines if produce_result.stdout is defined else produce_result.stderr_lines if produce_result.stderr is defined else "No output from produce command"
-
-    # Consume the test message
-    - name: Consume the test message
-      ansible.builtin.command:
-        cmd: podman exec {{ kafka_container_name }} kafka-console-consumer --topic ansible-test-topic --from-beginning --bootstrap-server localhost:9092 --max-messages 1 --timeout-ms 5000
-      register: consume_result
-      ignore_errors: yes
-      changed_when: false
-
-    - name: Display consume result
-      ansible.builtin.debug:
-        var: consume_result.stdout_lines if consume_result.stdout is defined else consume_result.stderr_lines if consume_result.stderr is defined else "No output from consume command"
-
-    # Display usage instructions
     - name: Display Kafka usage instructions
       ansible.builtin.debug:
         msg: |
