@@ -22,6 +22,7 @@
       # KRaft requires this to be initialized
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_INTERNAL://0.0.0.0:29092"
+      # Use the hostname instead of 0.0.0.0 in advertised listeners (important fix)
       KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://broker:9092,PLAINTEXT_INTERNAL://broker:29092"
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"
       # These settings are still needed
@@ -118,9 +119,9 @@
         msg: "Kafka container is {{ container_info.containers[0].State.Status }}"
       when: container_info.containers | length > 0
 
-    # View logs to troubleshoot potential issues
+    # View logs to troubleshoot potential issues - fixed command
     - name: Get container logs
-      ansible.builtin.command:
+      ansible.builtin.shell:
         cmd: podman logs {{ kafka_container_name }} | tail -n 30
       register: container_logs
       changed_when: false
@@ -133,7 +134,7 @@
     - name: Check for Kafka processes
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "ps aux | grep -v grep | grep -i kafka"
+        command: bash -c "ps aux | grep -v grep | grep -i kafka || echo 'No Kafka processes found'"
       register: process_check
       ignore_errors: yes
 
@@ -148,6 +149,9 @@
         command: bash -c "kafka-topics --list --bootstrap-server broker:9092"
       register: topic_list
       ignore_errors: yes
+      retries: 3
+      delay: 10
+      until: topic_list.rc == 0
 
     - name: Display topic list
       ansible.builtin.debug:
@@ -160,6 +164,9 @@
         command: bash -c "kafka-topics --create --topic ansible-test-topic --bootstrap-server broker:9092 --partitions 1 --replication-factor 1"
       register: create_topic
       ignore_errors: yes
+      retries: 2
+      delay: 5
+      until: create_topic.rc == 0
 
     - name: Display create topic result
       ansible.builtin.debug:
@@ -188,6 +195,32 @@
     - name: Display consumed message
       ansible.builtin.debug:
         var: consume_message.stdout_lines if consume_message.stdout is defined else consume_message.stderr_lines if consume_message.stderr is defined else "No message could be consumed"
+
+    # Manual formatting if needed (more explicit than auto-format)
+    - name: Manual KRaft format
+      containers.podman.podman_container_exec:
+        name: "{{ kafka_container_name }}"
+        command: bash -c "mkdir -p /tmp/kraft && echo 'process.roles=broker,controller' > /tmp/kraft/config.properties && echo 'node.id=1' >> /tmp/kraft/config.properties && echo 'controller.quorum.voters=1@broker:9093' >> /tmp/kraft/config.properties && echo 'controller.listener.names=CONTROLLER' >> /tmp/kraft/config.properties && echo 'listeners=PLAINTEXT://broker:9092,CONTROLLER://broker:9093' >> /tmp/kraft/config.properties && echo 'advertised.listeners=PLAINTEXT://broker:9092,CONTROLLER://broker:9093' >> /tmp/kraft/config.properties && KAFKA_HEAP_OPTS='-Xms512m -Xmx1g' kafka-storage format -t {{ kafka_cluster_id }} -c /tmp/kraft/config.properties"
+      register: format_result
+      ignore_errors: yes
+
+    - name: Display format result
+      ansible.builtin.debug:
+        var: format_result.stdout_lines if format_result.stdout is defined else format_result.stderr_lines if format_result.stderr is defined else "No output from format command"
+
+    # Restart the container if we did the manual formatting
+    - name: Restart Kafka container after manual formatting
+      containers.podman.podman_container:
+        name: "{{ kafka_container_name }}"
+        state: started
+        restart: true
+      when: format_result.rc is defined
+
+    # Wait for restart if needed
+    - name: Wait for Kafka to restart if needed
+      ansible.builtin.pause:
+        seconds: 20
+      when: format_result.rc is defined
 
     # Simple instructions for testing manually
     - name: Display manual testing instructions
