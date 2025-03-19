@@ -82,8 +82,9 @@
           process.roles=broker,controller
           node.id=1
           controller.quorum.voters=1@localhost:9093
-          controller.listener.names=CONTROLLER  # ✅ Fix: Add this line
+          controller.listener.names=CONTROLLER
           listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+          advertised.listeners=PLAINTEXT://localhost:9092
           listener.security.protocol.map=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
           inter.broker.listener.name=PLAINTEXT
           log.dirs=/var/lib/kafka/data
