@@ -52,7 +52,8 @@
           node.id=1
           controller.quorum.voters=1@localhost:9093
           controller.listener.names=CONTROLLER
-          listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_INTERNAL://0.0.0.0:29092
+          # FIX: Use localhost instead of 0.0.0.0 for listeners
+          listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093,PLAINTEXT_INTERNAL://localhost:29092
           advertised.listeners=PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://localhost:29092
           listener.security.protocol.map=PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
           inter.broker.listener.name=PLAINTEXT
@@ -75,7 +76,7 @@
           KAFKA_NODE_ID=1
           KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093
           KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
-          KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_INTERNAL://0.0.0.0:29092
+          KAFKA_LISTENERS=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093,PLAINTEXT_INTERNAL://localhost:29092
           KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://localhost:29092
           KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
           KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
