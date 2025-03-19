@@ -63,6 +63,18 @@
       ansible.builtin.set_fact:
         kafka_cluster_id: "{{ generated_cluster_id.stdout | trim }}"
 
+    - name: Create Log4j configuration file
+      ansible.builtin.copy:
+        dest: "{{ kafka_config_dir }}/tools-log4j.properties"
+        content: |
+          log4j.rootLogger=INFO, stdout
+          log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+          log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+          log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
+        owner: "1000"
+        group: "1000"
+        mode: '0644'
+
     - name: Generate server.properties file for Kafka
       ansible.builtin.copy:
         dest: "{{ kafka_config_dir }}/server.properties"
@@ -70,6 +82,7 @@
           process.roles=broker,controller
           node.id=1
           controller.quorum.voters=1@localhost:9093
+          controller.listener.names=CONTROLLER  # ✅ Fix: Add this line
           listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
           listener.security.protocol.map=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
           inter.broker.listener.name=PLAINTEXT
@@ -98,9 +111,9 @@
           podman run --rm
           -v {{ kafka_data_dir }}:/var/lib/kafka/data:rw,Z
           -v {{ kafka_config_dir }}:/etc/kafka:ro,Z
+          -e LOG4J_CONFIGURATION_FILE=/etc/kafka/tools-log4j.properties
           {{ kafka_image }}
           /usr/bin/kafka-storage format --config /etc/kafka/server.properties --cluster-id {{ kafka_cluster_id }}
-      register: format_result
 
     - name: Start Kafka container with KRaft mode
       containers.podman.podman_container:
