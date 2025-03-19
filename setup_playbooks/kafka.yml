@@ -132,10 +132,10 @@
       when: container_info.containers | length > 0
 
     # Check if the container is actually using KRaft mode
-    - name: Look for KRaft-related process information
+    - name: Look for Kafka processes
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: ps aux | grep -i kafka
+        command: bash -c "ps aux | grep -i kafka || echo 'No Kafka processes found'"
       register: process_info
       ignore_errors: yes
 
@@ -144,24 +144,35 @@
         msg: "{{ process_info.stdout if process_info.stdout is defined else 'No process information available' }}"
 
     # Check various possible log locations in the container
-    - name: Find Kafka log files
+    - name: Find Kafka-specific log files
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "find / -type f -name '*.log' -size +0 2>/dev/null | grep -v '/proc/' || echo 'No log files found'"
+        command: bash -c "find /var/lib/kafka /opt/kafka /etc/kafka /var/log /tmp -name '*.log' 2>/dev/null || echo 'No Kafka logs found in common directories'"
       register: kafka_log_files
       ignore_errors: yes
 
-    - name: Read a sample log file if available
+    - name: Check Kafka configuration
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "if [ -n \"$(find / -type f -name '*.log' -size +0 2>/dev/null | grep -v '/proc/' | head -1)\" ]; then head -20 $(find / -type f -name '*.log' -size +0 2>/dev/null | grep -v '/proc/' | head -1); else echo 'No log files available to read'; fi"
-      register: log_sample
+        command: bash -c "cat /etc/kafka/server.properties 2>/dev/null || cat /etc/kafka/kraft/server.properties 2>/dev/null || echo 'Server properties file not found'"
+      register: kafka_config
       ignore_errors: yes
+
+    - name: Check container environment variables
+      containers.podman.podman_container_exec:
+        name: "{{ kafka_container_name }}"
+        command: bash -c "env | grep -i kafka"
+      register: kafka_env
+      ignore_errors: yes
+
+    - name: Display kafka configuration
+      ansible.builtin.debug:
+        msg: "{{ (kafka_config.stdout|string)[:500] + '...' if kafka_config.stdout|string|length > 500 else kafka_config.stdout|default('No configuration found') }}"
+
+    - name: Display Kafka environment variables
+      ansible.builtin.debug:
+        msg: "{{ kafka_env.stdout if kafka_env.stdout is defined else 'No Kafka environment variables found' }}"
 
     - name: Display log files found
       ansible.builtin.debug:
         msg: "{{ kafka_log_files.stdout if kafka_log_files.stdout is defined else 'No log files found' }}"
-
-    - name: Display log sample
-      ansible.builtin.debug:
-        msg: "Log sample: {{ log_sample.stdout if log_sample.stdout is defined else 'No log data available' }}"
