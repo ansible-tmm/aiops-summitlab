@@ -5,7 +5,7 @@
   vars:
     kafka_container_name: cp-kafka
     kafka_image: "docker.io/confluentinc/cp-kafka:7.9.0"
-    kafka_memory_limit: "2049m"
+    kafka_memory_limit: "4096m"
     kafka_port: 9092
     kafka_controller_port: 9093
     kafka_data_dir: /var/lib/kafka/data
@@ -97,10 +97,10 @@
       register: dir_check
       ignore_errors: yes
 
-    - name: Execute KRaft format directly
+    - name: Execute KRaft format directly with adequate memory
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "echo 'process.roles=broker,controller' > /tmp/minimal.properties && echo 'node.id=1' >> /tmp/minimal.properties && echo 'controller.quorum.voters=1@localhost:9093' >> /tmp/minimal.properties && echo 'controller.listener.names=CONTROLLER' >> /tmp/minimal.properties && echo 'listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093' >> /tmp/minimal.properties && echo 'advertised.listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093' >> /tmp/minimal.properties && kafka-storage format -t {{ kafka_cluster_id }} -c /tmp/minimal.properties || echo 'Format command failed but continuing anyway'"
+        command: bash -c "KAFKA_HEAP_OPTS='-Xms512m -Xmx1g' echo 'process.roles=broker,controller' > /tmp/minimal.properties && echo 'node.id=1' >> /tmp/minimal.properties && echo 'controller.quorum.voters=1@localhost:9093' >> /tmp/minimal.properties && echo 'controller.listener.names=CONTROLLER' >> /tmp/minimal.properties && echo 'listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093' >> /tmp/minimal.properties && echo 'advertised.listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093' >> /tmp/minimal.properties && kafka-storage format -t {{ kafka_cluster_id }} -c /tmp/minimal.properties || echo 'Format command failed with exit code $?'"
       register: format_result
       ignore_errors: yes
       when: "dir_check.stdout is defined and '__cluster_metadata-0' not in dir_check.stdout"
