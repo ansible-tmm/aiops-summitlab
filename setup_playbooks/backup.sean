@@ -1,0 +1,36 @@
+    - name: Test if Kafka broker is accepting connections
+      ansible.builtin.command:
+        cmd: podman exec {{ kafka_container_name }} kafka-topics --list --bootstrap-server localhost:9092
+      register: topic_list
+      ignore_errors: yes
+      changed_when: false
+      retries: 3
+      delay: 5
+      until: topic_list.rc is not defined or topic_list.rc == 0
+
+    - name: Display topic list result
+      ansible.builtin.debug:
+        var: topic_list.stdout_lines if topic_list.stdout is defined else topic_list.stderr_lines if topic_list.stderr is defined else "No output from topic list command"
+
+    - name: Display Kafka usage instructions
+      ansible.builtin.debug:
+        msg: |
+          Kafka has been set up with KRaft mode.
+
+          Connection information:
+            - Bootstrap server: localhost:{{ kafka_port }}
+            - Cluster ID: {{ kafka_cluster_id }}
+
+          Example commands to use Kafka:
+
+          1. List all topics:
+             podman exec {{ kafka_container_name }} kafka-topics --list --bootstrap-server localhost:9092
+
+          2. Create a new topic:
+             podman exec {{ kafka_container_name }} kafka-topics --create --topic my-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+          3. Send messages to a topic:
+             echo "My message" | podman exec -i {{ kafka_container_name }} kafka-console-producer --topic my-topic --bootstrap-server localhost:9092
+
+          4. Consume messages from a topic:
+             podman exec {{ kafka_container_name }} kafka-console-consumer --topic my-topic --from-beginning --bootstrap-server localhost:9092
