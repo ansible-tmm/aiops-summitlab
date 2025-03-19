@@ -48,11 +48,11 @@
         name: kafka-network
         state: present
 
-    - name: Remove existing Kafka container if it exists
-      containers.podman.podman_container:
-        name: "{{ kafka_container_name }}"
-        state: absent
+    - name: Force remove any existing Kafka container
+      ansible.builtin.command:
+        cmd: "podman rm -f {{ kafka_container_name }}"
       ignore_errors: yes
+      changed_when: false
 
     - name: Generate Kafka Cluster ID inside the container
       ansible.builtin.command:
@@ -60,24 +60,16 @@
       register: generated_cluster_id
       changed_when: false
 
-    - name: Trim Generated Cluster ID
+    - name: Ensure Kafka Cluster ID is set
       ansible.builtin.set_fact:
         kafka_cluster_id: "{{ generated_cluster_id.stdout | trim }}"
-
-    - name: Display Generated Cluster ID
-      ansible.builtin.debug:
-        msg: "Generated Cluster ID: {{ kafka_cluster_id }}"
 
     - name: Format Kafka storage inside the container
       ansible.builtin.command:
         cmd: >
-          podman run --rm -v {{ kafka_data_dir }}:/var/lib/kafka/data:Z {{ kafka_image }}
+          podman run --rm -v {{ kafka_data_dir }}:/var/lib/kafka/data:rw,Z {{ kafka_image }}
           /usr/bin/kafka-storage format --cluster-id {{ kafka_cluster_id }} --config /etc/kafka/kraft/server.properties
       register: format_result
-
-    - name: Display Format Result
-      ansible.builtin.debug:
-        var: format_result.stdout_lines
 
     - name: Start Kafka container with KRaft mode
       containers.podman.podman_container:
@@ -85,10 +77,10 @@
         image: "{{ kafka_image }}"
         state: started
         detach: true
-        memory: "6g"  # Ensuring enough memory for Kafka
+        memory: "6g"
         env:
           KAFKA_HEAP_OPTS: "-Xms1g -Xmx4g"
-          KAFKA_CLUSTER_ID: "{{ kafka_cluster_id }}"  # Pass the generated Cluster ID
+          KAFKA_CLUSTER_ID: "{{ kafka_cluster_id }}"
           KAFKA_PROCESS_ROLES: "broker,controller"
           KAFKA_NODE_ID: "1"
           KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
@@ -111,11 +103,26 @@
         restart_policy: always
         network: kafka-network
         volume:
-          - "{{ kafka_data_dir }}:/var/lib/kafka/data:Z"
+          - "{{ kafka_data_dir }}:/var/lib/kafka/data:rw,Z"
 
-    - name: Wait for Kafka to initialize
-      ansible.builtin.pause:
-        seconds: 20
+    - name: Verify KAFKA_CLUSTER_ID inside the running container
+      ansible.builtin.command:
+        cmd: "podman exec {{ kafka_container_name }} env | grep KAFKA_CLUSTER_ID"
+      register: kafka_env_check
+      changed_when: false
+
+    - name: Display Kafka Cluster ID inside container
+      ansible.builtin.debug:
+        msg: "Kafka Cluster ID inside container: {{ kafka_env_check.stdout | trim }}"
+
+    - name: Wait until Kafka is listening on port 9092
+      ansible.builtin.command:
+        cmd: "podman exec {{ kafka_container_name }} bash -c 'nc -z localhost 9092'"
+      register: kafka_ready
+      retries: 6
+      delay: 5
+      changed_when: false
+      failed_when: kafka_ready.rc != 0
 
     - name: Verify Kafka is running by listing topics
       ansible.builtin.command:
@@ -133,9 +140,9 @@
       when: topic_list.rc != 0
       changed_when: false
 
-    - name: Display Kafka Logs if Startup Fails
+    - name: Display last 20 Kafka log lines if Startup Fails
       ansible.builtin.debug:
-        var: kafka_logs.stdout_lines
+        msg: "{{ kafka_logs.stdout_lines[-20:] | default('No logs available') }}"
       when: topic_list.rc != 0
 
     - name: Display Kafka Topics
