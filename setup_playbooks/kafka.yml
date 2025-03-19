@@ -106,7 +106,7 @@
           - "{{ kafka_data_dir }}:/var/lib/kafka/data:rw,Z"
 
     - name: Verify KAFKA_CLUSTER_ID inside the running container
-      ansible.builtin.command:
+      ansible.builtin.shell:
         cmd: "podman exec {{ kafka_container_name }} env | grep KAFKA_CLUSTER_ID"
       register: kafka_env_check
       changed_when: false
