@@ -4,7 +4,7 @@
   become: true
   vars:
     kafka_container_name: cp-kafka
-    kafka_image: "docker.io/confluentinc/cp-kafka:7.0.1"
+    kafka_image: "docker.io/confluentinc/cp-kafka:7.9.0"
     kafka_memory_limit: "2049m"
     kafka_port: 9092
     kafka_controller_port: 9093
