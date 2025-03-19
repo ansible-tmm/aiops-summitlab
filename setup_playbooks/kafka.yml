@@ -97,37 +97,10 @@
       register: dir_check
       ignore_errors: yes
 
-    - name: Create simple init script for KRaft
-      ansible.builtin.copy:
-        dest: "/tmp/kafka_init.sh"
-        mode: "0755"
-        content: |
-          #!/bin/bash
-          # Simple script to initialize KRaft storage
-          cat > /tmp/minimal.properties << EOF
-          process.roles=broker,controller
-          node.id=1
-          controller.quorum.voters=1@localhost:9093
-          controller.listener.names=CONTROLLER
-          listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093
-          advertised.listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093
-          EOF
-
-          # Try to format with minimal config
-          kafka-storage format -t {{ kafka_cluster_id }} -c /tmp/minimal.properties
-          exit 0  # Return success even if command fails
-      when: "dir_check.stdout is defined and '__cluster_metadata-0' not in dir_check.stdout"
-
-    - name: Copy init script to container
-      containers.podman.podman_container_cp:
-        src: "/tmp/kafka_init.sh"
-        dest: "{{ kafka_container_name }}:/tmp/kafka_init.sh"
-      when: "dir_check.stdout is defined and '__cluster_metadata-0' not in dir_check.stdout"
-
-    - name: Execute KRaft init script
+    - name: Execute KRaft format directly
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash /tmp/kafka_init.sh
+        command: bash -c "echo 'process.roles=broker,controller' > /tmp/minimal.properties && echo 'node.id=1' >> /tmp/minimal.properties && echo 'controller.quorum.voters=1@localhost:9093' >> /tmp/minimal.properties && echo 'controller.listener.names=CONTROLLER' >> /tmp/minimal.properties && echo 'listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093' >> /tmp/minimal.properties && echo 'advertised.listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093' >> /tmp/minimal.properties && kafka-storage format -t {{ kafka_cluster_id }} -c /tmp/minimal.properties || echo 'Format command failed but continuing anyway'"
       register: format_result
       ignore_errors: yes
       when: "dir_check.stdout is defined and '__cluster_metadata-0' not in dir_check.stdout"
