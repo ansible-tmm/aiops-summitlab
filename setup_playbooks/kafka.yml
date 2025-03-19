@@ -54,13 +54,13 @@
       ignore_errors: yes
       changed_when: false
 
-    - name: Generate Kafka Cluster ID inside the container
+    - name: Generate Kafka KRaft Cluster ID
       ansible.builtin.command:
         cmd: "podman run --rm {{ kafka_image }} /usr/bin/kafka-storage random-uuid"
       register: generated_cluster_id
       changed_when: false
 
-    - name: Ensure Kafka Cluster ID is set
+    - name: Ensure Kafka KRaft Cluster ID is set
       ansible.builtin.set_fact:
         kafka_cluster_id: "{{ generated_cluster_id.stdout | trim }}"
 
@@ -80,7 +80,7 @@
         memory: "6g"
         env:
           KAFKA_HEAP_OPTS: "-Xms1g -Xmx4g"
-          KAFKA_CLUSTER_ID: "{{ kafka_cluster_id }}"
+          KAFKA_KRAFT_CLUSTER_ID: "{{ kafka_cluster_id }}"
           KAFKA_PROCESS_ROLES: "broker,controller"
           KAFKA_NODE_ID: "1"
           KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
@@ -105,15 +105,15 @@
         volume:
           - "{{ kafka_data_dir }}:/var/lib/kafka/data:rw,Z"
 
-    - name: Verify KAFKA_CLUSTER_ID inside the running container
+    - name: Verify KAFKA_KRAFT_CLUSTER_ID inside the running container
       ansible.builtin.shell:
-        cmd: "podman exec {{ kafka_container_name }} env | grep KAFKA_CLUSTER_ID"
+        cmd: "podman exec {{ kafka_container_name }} env | grep KAFKA_KRAFT_CLUSTER_ID"
       register: kafka_env_check
       changed_when: false
 
-    - name: Display Kafka Cluster ID inside container
+    - name: Display Kafka KRaft Cluster ID inside container
       ansible.builtin.debug:
-        msg: "Kafka Cluster ID inside container: {{ kafka_env_check.stdout | trim }}"
+        var: kafka_env_check.stdout_lines
 
     - name: Wait until Kafka is listening on port 9092
       ansible.builtin.command:
@@ -142,7 +142,7 @@
 
     - name: Display last 20 Kafka log lines if Startup Fails
       ansible.builtin.debug:
-        msg: "{{ kafka_logs.stdout_lines[-20:] | default('No logs available') }}"
+        msg: "{{ kafka_logs.stdout_lines | list | select('string') | list | slice(-20) }}"
       when: topic_list.rc != 0
 
     - name: Display Kafka Topics
