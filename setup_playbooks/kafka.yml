@@ -18,7 +18,7 @@
       KAFKA_SERVER_ROLES: "broker,controller"
       KAFKA_PROCESS_ROLES: "broker,controller"
       KAFKA_NODE_ID: "1"
-      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@broker:9093"
       # KRaft requires this to be initialized
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_INTERNAL://0.0.0.0:29092"
@@ -36,8 +36,8 @@
       CLUSTER_ID: "{{ kafka_cluster_id }}"
       # Force use of KRaft even in older images
       KAFKA_METADATA_LOG_DIR: "/var/lib/kafka/data"
-      # Disable features incompatible with KRaft
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # Enable auto topic creation
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       # Force KRaft metadata version
       KAFKA_KRAFT_CLUSTER_ID: "{{ kafka_cluster_id }}"
   tasks:
@@ -48,23 +48,42 @@
           - python3-podman
         state: present
 
-    - name: Create data directory for Kafka
+    # Create the parent directory structure if it doesn't exist
+    - name: Ensure parent directory structure exists
       ansible.builtin.file:
-        path: "{{ kafka_data_dir }}"
+        path: "{{ kafka_data_dir | dirname }}"
         state: directory
         mode: '0755'
 
+    # Clear existing data before starting fresh
+    - name: Remove existing Kafka data directory if it exists
+      ansible.builtin.file:
+        path: "{{ kafka_data_dir }}"
+        state: absent
+
+    # Create a clean data directory with proper permissions
+    - name: Create clean data directory with proper permissions
+      ansible.builtin.file:
+        path: "{{ kafka_data_dir }}"
+        state: directory
+        owner: "1000"  # appuser in the container
+        group: "1000"
+        mode: '0755'
+
+    # Create network for Kafka
     - name: Create Podman network if it doesn't exist
       containers.podman.podman_network:
         name: kafka-network
         state: present
 
+    # Remove existing container if it exists
     - name: Remove existing Kafka container if it exists
       containers.podman.podman_container:
         name: "{{ kafka_container_name }}"
         state: absent
       ignore_errors: yes
 
+    # Start the Kafka container with proper configuration
     - name: Start Kafka container with KRaft mode
       containers.podman.podman_container:
         name: "{{ kafka_container_name }}"
@@ -83,44 +102,12 @@
         volume:
           - "{{ kafka_data_dir }}:/var/lib/kafka/data:Z"
 
-    # Initialize KRaft metadata and verify proper operation
-    # The approach used creates a minimal KRaft properties file to avoid legacy cluster warnings
+    # Give Kafka sufficient time to initialize
     - name: Wait for Kafka container to be ready
       ansible.builtin.pause:
-        seconds: 10
+        seconds: 30
 
-    # Try a simpler approach for KRaft initialization
-    - name: Check if directories need to be formatted
-      containers.podman.podman_container_exec:
-        name: "{{ kafka_container_name }}"
-        command: bash -c "ls -la /var/lib/kafka/data/"
-      register: dir_check
-      ignore_errors: yes
-
-    - name: Execute KRaft format directly with adequate memory
-      containers.podman.podman_container_exec:
-        name: "{{ kafka_container_name }}"
-        command: bash -c "KAFKA_HEAP_OPTS='-Xms512m -Xmx1g' echo 'process.roles=broker,controller' > /tmp/minimal.properties && echo 'node.id=1' >> /tmp/minimal.properties && echo 'controller.quorum.voters=1@localhost:9093' >> /tmp/minimal.properties && echo 'controller.listener.names=CONTROLLER' >> /tmp/minimal.properties && echo 'listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093' >> /tmp/minimal.properties && echo 'advertised.listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093' >> /tmp/minimal.properties && kafka-storage format -t {{ kafka_cluster_id }} -c /tmp/minimal.properties || echo 'Format command failed with exit code $?'"
-      register: format_result
-      ignore_errors: yes
-      when: "dir_check.stdout is defined and '__cluster_metadata-0' not in dir_check.stdout"
-
-    - name: Display format result
-      ansible.builtin.debug:
-        var: format_result
-
-    - name: Restart Kafka container if format was needed
-      containers.podman.podman_container:
-        name: "{{ kafka_container_name }}"
-        state: started
-        force_restart: true
-      when: format_result.stderr is defined and format_result.stderr != ''
-
-    - name: Wait for Kafka to initialize after restart
-      ansible.builtin.pause:
-        seconds: 15
-      when: format_result.stderr is defined and format_result.stderr != ''
-
+    # Check if container is running
     - name: Check Kafka container status
       containers.podman.podman_container_info:
         name: "{{ kafka_container_name }}"
@@ -131,48 +118,91 @@
         msg: "Kafka container is {{ container_info.containers[0].State.Status }}"
       when: container_info.containers | length > 0
 
-    # Check if the container is actually using KRaft mode
-    - name: Look for Kafka processes
+    # View logs to troubleshoot potential issues
+    - name: Get container logs
+      ansible.builtin.command:
+        cmd: podman logs {{ kafka_container_name }} | tail -n 30
+      register: container_logs
+      changed_when: false
+
+    - name: Display container logs
+      ansible.builtin.debug:
+        var: container_logs.stdout_lines
+
+    # Verify that Kafka is actually running inside the container
+    - name: Check for Kafka processes
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "ps aux | grep -i kafka || echo 'No Kafka processes found'"
-      register: process_info
+        command: bash -c "ps aux | grep -v grep | grep -i kafka"
+      register: process_check
       ignore_errors: yes
 
-    - name: Display process information
+    - name: Display Kafka process info
       ansible.builtin.debug:
-        msg: "{{ process_info.stdout if process_info.stdout is defined else 'No process information available' }}"
+        var: process_check.stdout_lines if process_check.stdout is defined else "No Kafka processes found running"
 
-    # Check various possible log locations in the container
-    - name: Find Kafka-specific log files
+    # Test connectivity by listing topics
+    - name: Test if Kafka broker is accepting connections
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "find /var/lib/kafka /opt/kafka /etc/kafka /var/log /tmp -name '*.log' 2>/dev/null || echo 'No Kafka logs found in common directories'"
-      register: kafka_log_files
+        command: bash -c "kafka-topics --list --bootstrap-server broker:9092"
+      register: topic_list
       ignore_errors: yes
 
-    - name: Check Kafka configuration
+    - name: Display topic list
+      ansible.builtin.debug:
+        var: topic_list.stdout_lines if topic_list.stdout is defined else "No output from topic list command"
+
+    # Create a test topic to confirm functionality
+    - name: Create a test topic
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "cat /etc/kafka/server.properties 2>/dev/null || cat /etc/kafka/kraft/server.properties 2>/dev/null || echo 'Server properties file not found'"
-      register: kafka_config
+        command: bash -c "kafka-topics --create --topic ansible-test-topic --bootstrap-server broker:9092 --partitions 1 --replication-factor 1"
+      register: create_topic
       ignore_errors: yes
 
-    - name: Check container environment variables
+    - name: Display create topic result
+      ansible.builtin.debug:
+        var: create_topic.stdout_lines if create_topic.stdout is defined else create_topic.stderr_lines if create_topic.stderr is defined else "No output from create topic command"
+
+    # Write a test message
+    - name: Write a test message to the topic
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "env | grep -i kafka"
-      register: kafka_env
+        command: bash -c "echo 'Hello from Ansible' | kafka-console-producer --topic ansible-test-topic --bootstrap-server broker:9092"
+      register: produce_message
       ignore_errors: yes
 
-    - name: Display kafka configuration
+    - name: Display producer result
       ansible.builtin.debug:
-        msg: "{{ (kafka_config.stdout|string)[:500] + '...' if kafka_config.stdout|string|length > 500 else kafka_config.stdout|default('No configuration found') }}"
+        var: produce_message.stdout_lines if produce_message.stdout is defined else produce_message.stderr_lines if produce_message.stderr is defined else "No output from producer command"
 
-    - name: Display Kafka environment variables
-      ansible.builtin.debug:
-        msg: "{{ kafka_env.stdout if kafka_env.stdout is defined else 'No Kafka environment variables found' }}"
+    # Read the test message
+    - name: Read the test message from the topic
+      containers.podman.podman_container_exec:
+        name: "{{ kafka_container_name }}"
+        command: bash -c "kafka-console-consumer --topic ansible-test-topic --from-beginning --bootstrap-server broker:9092 --max-messages 1 --timeout-ms 10000"
+      register: consume_message
+      ignore_errors: yes
 
-    - name: Display log files found
+    - name: Display consumed message
       ansible.builtin.debug:
-        msg: "{{ kafka_log_files.stdout if kafka_log_files.stdout is defined else 'No log files found' }}"
+        var: consume_message.stdout_lines if consume_message.stdout is defined else consume_message.stderr_lines if consume_message.stderr is defined else "No message could be consumed"
+
+    # Simple instructions for testing manually
+    - name: Display manual testing instructions
+      ansible.builtin.debug:
+        msg: |
+          Kafka appears to be set up. To manually test:
+
+          1. Create a topic:
+             podman exec -it {{ kafka_container_name }} kafka-topics --create --topic test-topic --bootstrap-server broker:9092 --partitions 1 --replication-factor 1
+
+          2. Send a message:
+             podman exec -it {{ kafka_container_name }} bash -c "echo 'Test message' | kafka-console-producer --topic test-topic --bootstrap-server broker:9092"
+
+          3. Consume messages:
+             podman exec -it {{ kafka_container_name }} kafka-console-consumer --topic test-topic --from-beginning --bootstrap-server broker:9092 --max-messages 1
+
+          To check if the service is working from the host system:
+             podman exec -it {{ kafka_container_name }} bash -c "echo 'External test' | kafka-console-producer --topic test-topic --bootstrap-server localhost:9092"
