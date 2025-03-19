@@ -75,14 +75,15 @@
           - "{{ kafka_data_dir }}:/var/lib/kafka/data:Z"
 
     # Initialize KRaft metadata if this is the first start
+    # Adding verification tasks to check if Kafka is running properly
     - name: Wait for Kafka container to be ready
       ansible.builtin.pause:
-        seconds: 5
+        seconds: 10
 
     - name: Format KRaft storage directories
       containers.podman.podman_container_exec:
         name: "{{ kafka_container_name }}"
-        command: bash -c "if [ ! -f /var/lib/kafka/data/__cluster_metadata-0/meta.properties ]; then kafka-storage.sh format -t {{ kafka_cluster_id }} -c /etc/kafka/kraft/server.properties; fi"
+        command: bash -c "if [ ! -f /var/lib/kafka/data/__cluster_metadata-0/meta.properties ]; then kafka-storage format -t {{ kafka_cluster_id }} -c /etc/kafka/server.properties || kafka-storage format -t {{ kafka_cluster_id }} -c /etc/kafka/kraft/server.properties; fi"
       register: format_result
       ignore_errors: yes
 
@@ -93,6 +94,20 @@
     - name: Restart Kafka container if format was needed
       containers.podman.podman_container:
         name: "{{ kafka_container_name }}"
-        state: started
-        force_restart: true
+        state: restarted
       when: format_result.stderr is defined and format_result.stderr != ''
+
+    - name: Wait for Kafka to initialize after restart
+      ansible.builtin.pause:
+        seconds: 15
+      when: format_result.stderr is defined and format_result.stderr != ''
+
+    - name: Check Kafka container status
+      containers.podman.podman_container_info:
+        name: "{{ kafka_container_name }}"
+      register: container_info
+
+    - name: Display container status
+      ansible.builtin.debug:
+        msg: "Kafka container is {{ container_info.containers[0].State.Status }}"
+      when: container_info.containers | length > 0
