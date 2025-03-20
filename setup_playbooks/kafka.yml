@@ -66,27 +66,27 @@
       ansible.builtin.debug:
         var: topic_list.stdout_lines
 
-    - name: Push a topic for testing
-      block:
-        - name: Push a Kafka topic
-          ansible.builtin.command:
-            cmd: "podman exec {{ kafka_container_name }} /{{ kafka_path }}/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1"
-          register: topic_list
-          changed_when: false
-          retries: 5
-          delay: 5
-          until: topic_list.rc == 0
+    - name: Push a Kafka topic
+      ansible.builtin.command:
+        cmd: "podman exec {{ kafka_container_name }} /{{ kafka_path }}/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1"
+      register: push_topic
+      changed_when: false
+      retries: 5
+      delay: 5
+      until: push_topic.rc == 0
+      when: "'test-topic' not in topic_list.stdout_lines"
 
-        - name: List Kafka topics
-          ansible.builtin.command:
-            cmd: "podman exec {{ kafka_container_name }} /{{ kafka_path }}/kafka-topics.sh --list --bootstrap-server localhost:9092"
-          register: topic_list
-          changed_when: false
-          retries: 5
-          delay: 5
-          until: topic_list.rc == 0
+    - name: List Kafka topics
+      ansible.builtin.command:
+        cmd: "podman exec {{ kafka_container_name }} /{{ kafka_path }}/kafka-topics.sh --list --bootstrap-server localhost:9092"
+      register: topic_list_2
+      changed_when: false
+      retries: 5
+      delay: 5
+      until: topic_list_2.rc == 0
+      when: "'test-topic' not in topic_list.stdout_lines"
 
-        - name: Debug Kafka Topics
-          ansible.builtin.debug:
-            var: topic_list.stdout_lines
+    - name: Debug Kafka Topics
+      ansible.builtin.debug:
+        var: topic_list.stdout_lines
       when: "'test-topic' not in topic_list.stdout_lines"
