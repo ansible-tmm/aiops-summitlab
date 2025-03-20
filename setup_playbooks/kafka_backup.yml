@@ -1,0 +1,181 @@
+---
+- name: Deploy a Kafka container with Podman using KRaft mode
+  hosts: all
+  become: true
+  vars:
+    kafka_container_name: cp-kafka
+    kafka_image: "docker.io/confluentinc/cp-kafka:7.9.0"
+    kafka_memory_limit: "6g"
+    kafka_port: 9092
+    kafka_controller_port: 9093
+    kafka_data_dir: /var/lib/kafka/data
+    kafka_config_dir: /etc/kafka
+    kafka_tmp_dir: /tmp/kafka-setup-{{ ansible_date_time.epoch }}
+
+  tasks:
+    - name: Ensure Kafka meta.properties is removed before formatting
+      ansible.builtin.file:
+        path: "{{ kafka_data_dir }}/meta.properties"
+        state: absent
+
+    - name: Ensure required packages are installed
+      ansible.builtin.package:
+        name:
+          - podman
+          - python3-podman
+        state: present
+
+    - name: Pull Kafka image to ensure availability
+      ansible.builtin.command:
+        cmd: "podman pull {{ kafka_image }}"
+      changed_when: false
+
+    - name: Create required directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "1000"
+        group: "1000"
+        mode: '0755'
+      loop:
+        - "{{ kafka_tmp_dir }}"
+        - "{{ kafka_data_dir }}"
+        - "{{ kafka_config_dir }}"
+
+    - name: Generate Kafka Cluster ID
+      ansible.builtin.command:
+        cmd: "podman run --rm {{ kafka_image }} /usr/bin/kafka-storage random-uuid"
+      register: generated_cluster_id
+      changed_when: false
+
+    - name: Store Kafka Cluster ID as a fact
+      ansible.builtin.set_fact:
+        kafka_cluster_id: "{{ generated_cluster_id.stdout | trim }}"
+
+    - name: Debug Kafka Cluster ID
+      ansible.builtin.debug:
+        var: kafka_cluster_id
+
+    - name: Create Log4j configuration file
+      ansible.builtin.copy:
+        dest: "{{ kafka_config_dir }}/tools-log4j.properties"
+        content: |
+          log4j.rootLogger=INFO, stdout
+          log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+          log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+          log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
+        owner: "1000"
+        group: "1000"
+        mode: '0644'
+
+    # - name: Generate server.properties file for Kafka
+    #   ansible.builtin.copy:
+    #     dest: "{{ kafka_config_dir }}/server.properties"
+    #     content: |
+    #       process.roles=broker,controller
+    #       node.id=1
+    #       controller.listener.names=CONTROLLER
+    #       controller.quorum.voters=1@localhost:9093
+    #       listeners=CONTROLLER://:9093,PLAINTEXT://:9092
+    #       advertised.listeners=PLAINTEXT://localhost:9092
+    #       listener.security.protocol.map=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+    #       inter.broker.listener.name=PLAINTEXT
+    #       log.dirs=/var/lib/kafka/data
+    #       num.network.threads=3
+    #       num.io.threads=8
+    #       socket.send.buffer.bytes=102400
+    #       socket.receive.buffer.bytes=102400
+    #       socket.request.max.bytes=104857600
+    #       log.retention.hours=168
+    #       num.partitions=1
+    #       offsets.topic.replication.factor=1
+    #       transaction.state.log.replication.factor=1
+    #       transaction.state.log.min.isr=1
+    #       min.insync.replicas=1
+    #       log.segment.bytes=1073741824
+    #       log.retention.check.interval.ms=300000
+    #       cluster.id={{ kafka_cluster_id }}
+    #     owner: "1000"
+    #     group: "1000"
+    #     mode: '0644'
+
+    # - name: Format Kafka storage
+    #   ansible.builtin.command:
+    #     cmd: >
+    #       podman run --rm
+    #       -v {{ kafka_data_dir }}:/var/lib/kafka/data:rw,Z
+    #       -v {{ kafka_config_dir }}:/etc/kafka:ro,Z
+    #       -e LOG4J_CONFIGURATION_FILE=/etc/kafka/tools-log4j.properties
+    #       {{ kafka_image }}
+    #       /usr/bin/kafka-storage format --config /etc/kafka/server.properties --cluster-id {{ kafka_cluster_id }}
+    #   register: format_result
+    #   changed_when: false
+
+    - name: Debug Kafka storage format output
+      ansible.builtin.debug:
+        var: format_result.stdout_lines
+
+    # - name: Start Kafka container with KRaft mode
+    #   containers.podman.podman_container:
+    #     name: "{{ kafka_container_name }}"
+    #     image: "{{ kafka_image }}"
+    #     state: started
+    #     detach: true
+    #     memory: "{{ kafka_memory_limit }}"
+    #     env:
+    #       KAFKA_HEAP_OPTS: "-Xms1g -Xmx4g"
+    #       KAFKA_KRAFT_MODE: "true"
+    #     hostname: kafka
+    #     publish:
+    #       - "{{ kafka_port }}:9092"
+    #       - "{{ kafka_controller_port }}:9093"
+    #     restart_policy: always
+    #     network: bridge
+    #     volume:
+    #       - "{{ kafka_data_dir }}:/var/lib/kafka/data:rw,Z"
+    #       - "{{ kafka_config_dir }}/server.properties:/etc/kafka/server.properties:ro,Z"
+
+    - name: Start Kafka container with KRaft mode
+      containers.podman.podman_container:
+        name: "{{ kafka_container_name }}"
+        image: "{{ kafka_image }}"
+        state: started
+        detach: true
+        memory: "{{ kafka_memory_limit }}"
+        env:
+          KAFKA_HEAP_OPTS: "-Xms1g -Xmx4g"
+          KAFKA_ENABLE_KRAFT: "yes"
+          KAFKA_CFG_KRAFT_CLUSTER_ID: "{{ kafka_cluster_id }}"
+          KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+          KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+          KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
+          KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT"
+          KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://127.0.0.1:9092,EXTERNAL://kafka_b:9094"
+          KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@127.0.0.1:9093"
+          KAFKA_CFG_NODE_ID: "1"
+          KAFKA_BROKER_ID: "1"
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+          KAFKA_CFG_NUM_PARTITIONS: "2"
+          ALLOW_PLAINTEXT_LISTENER: "yes"
+        hostname: kafka_b
+        publish:
+          - "{{ kafka_port }}:9092"
+          - "{{ kafka_controller_port }}:9093"
+        restart_policy: always
+        network: bridge
+        volume:
+          - "{{ kafka_data_dir }}:/bitnami"
+
+
+    - name: Verify Kafka is running by listing topics
+      ansible.builtin.command:
+        cmd: "podman exec {{ kafka_container_name }} kafka-topics --list --bootstrap-server localhost:9092"
+      register: topic_list
+      changed_when: false
+      retries: 5
+      delay: 5
+      until: topic_list.rc == 0
+
+    - name: Debug Kafka Topics
+      ansible.builtin.debug:
+        var: topic_list.stdout_lines
