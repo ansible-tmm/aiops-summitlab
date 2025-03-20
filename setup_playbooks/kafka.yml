@@ -67,7 +67,6 @@
         var: topic_list.stdout_lines
 
     - name: Push a topic for testing
-      when: "'test-topic' not in topic_list.stdout"
       block:
         - name: Push a Kafka topic
           ansible.builtin.command:
@@ -90,3 +89,4 @@
         - name: Debug Kafka Topics
           ansible.builtin.debug:
             var: topic_list.stdout_lines
+      when: "'test-topic' not in topic_list.stdout_lines"
