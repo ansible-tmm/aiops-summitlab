@@ -78,6 +78,15 @@
           delay: 5
           until: topic_list.rc == 0
 
+        - name: List Kafka topics
+          ansible.builtin.command:
+            cmd: "podman exec {{ kafka_container_name }} /{{ kafka_path }}/kafka-topics.sh --list --bootstrap-server localhost:9092"
+          register: topic_list
+          changed_when: false
+          retries: 5
+          delay: 5
+          until: topic_list.rc == 0
+
         - name: Debug Kafka Topics
           ansible.builtin.debug:
             var: topic_list.stdout_lines
