@@ -13,6 +13,11 @@
     kafka_tmp_dir: /tmp/kafka-setup-{{ ansible_date_time.epoch }}
 
   tasks:
+    - name: Ensure Kafka meta.properties is removed before formatting
+      ansible.builtin.file:
+        path: "{{ kafka_data_dir }}/meta.properties"
+        state: absent
+
     - name: Ensure required packages are installed
       ansible.builtin.package:
         name:
@@ -46,6 +51,10 @@
     - name: Store Kafka Cluster ID as a fact
       ansible.builtin.set_fact:
         kafka_cluster_id: "{{ generated_cluster_id.stdout | trim }}"
+
+    - name: Debug Kafka Cluster ID
+      ansible.builtin.debug:
+        var: kafka_cluster_id
 
     - name: Create Log4j configuration file
       ansible.builtin.copy:
