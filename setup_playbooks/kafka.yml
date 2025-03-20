@@ -4,11 +4,10 @@
   become: true
   vars:
     kafka_container_name: cp-kafka
-    # kafka_image: "docker.io/bitnami/kafka:3.4"
-    # kafka_image: "docker.io/confluentinc/cp-kafka:7.9.0"
     kafka_image: "docker.io/apache/kafka"
     kafka_port: 9092
     kafka_controller_port: 9093
+    kafka_path: "/opt/kafka/bin/"
 
   tasks:
     - name: Ensure required packages are installed
@@ -27,34 +26,6 @@
     - name: Create Kafka data volume
       containers.podman.podman_volume:
         name: kafka_data
-
-    # - name: Start Kafka container
-    #   containers.podman.podman_container:
-    #     name: "{{ kafka_container_name }}"
-    #     image: "{{ kafka_image }}"
-    #     hostname: "{{ kafka_container_name }}"
-    #     state: started
-    #     restart_policy: always
-    #     network: bridge
-    #     ports:
-    #       - "9092:9092"
-    #       - "9094:9094"
-    #     volumes:
-    #       - "kafka_data:/bitnami"
-    #     env:
-    #       KAFKA_ENABLE_KRAFT: "yes"
-    #       KAFKA_CFG_PROCESS_ROLES: "broker,controller"
-    #       KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-    #       KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094"
-    #       KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT"
-    #       KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://127.0.0.1:9092,EXTERNAL://kafka_b:9094"
-    #       KAFKA_BROKER_ID: "1"
-    #       KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@127.0.0.1:9093"
-    #       ALLOW_PLAINTEXT_LISTENER: "yes"
-    #       KAFKA_CFG_NODE_ID: "1"
-    #       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-    #       BITNAMI_DEBUG: "yes"
-    #       KAFKA_CFG_NUM_PARTITIONS: "2"
 
     - name: Start Apache Kafka container
       containers.podman.podman_container:
@@ -81,28 +52,31 @@
           KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
           KAFKA_NUM_PARTITIONS: "3"
 
-    # - name: Push a Kafka topic
-    #   ansible.builtin.command:
-    #     cmd: "podman exec {{ kafka_container_name }} /opt/bitnami/kafka/bin/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1"
-    #   register: topic_list
-    #   changed_when: false
-    #   retries: 5
-    #   delay: 5
-    #   until: topic_list.rc == 0
+   ## Some tests below to list out topics, and create a test-topic if nothing exists
+    - name: List Kafka topics
+      ansible.builtin.command:
+        cmd: "podman exec {{ kafka_container_name }} /{{ kafka_path }}/kafka-topics.sh --list --bootstrap-server localhost:9092"
+      register: topic_list
+      changed_when: false
+      retries: 5
+      delay: 5
+      until: topic_list.rc == 0
 
-    # - name: Debug Kafka Topics
-    #   ansible.builtin.debug:
-    #     var: topic_list.stdout_lines
+    - name: Debug Kafka Topics
+      ansible.builtin.debug:
+        var: topic_list.stdout_lines
 
-    # - name: List Kafka topics
-    #   ansible.builtin.command:
-    #     cmd: "podman exec {{ kafka_container_name }} /opt/bitnami/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092"
-    #   register: topic_list
-    #   changed_when: false
-    #   retries: 5
-    #   delay: 5
-    #   until: topic_list.rc == 0
+    - name: Push a Kafka topic
+      ansible.builtin.command:
+        cmd: "podman exec {{ kafka_container_name }} /{{ kafka_path }}/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1"
+      register: topic_list
+      changed_when: false
+      retries: 5
+      delay: 5
+      until: topic_list.rc == 0
+      when: "'test-topic' not in topic_list.stdout"
 
-    # - name: Debug Kafka Topics
-    #   ansible.builtin.debug:
-    #     var: topic_list.stdout_lines
+    - name: Debug Kafka Topics
+      ansible.builtin.debug:
+        var: topic_list.stdout_lines
+      when: "'test-topic' not in topic_list.stdout"
