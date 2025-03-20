@@ -115,6 +115,7 @@
         memory: "{{ kafka_memory_limit }}"
         env:
           KAFKA_HEAP_OPTS: "-Xms1g -Xmx4g"
+          KAFKA_KRAFT_MODE: "true"
         hostname: kafka
         publish:
           - "{{ kafka_port }}:9092"
