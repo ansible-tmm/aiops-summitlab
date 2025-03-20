@@ -66,17 +66,18 @@
       ansible.builtin.debug:
         var: topic_list.stdout_lines
 
-    - name: Push a Kafka topic
-      ansible.builtin.command:
-        cmd: "podman exec {{ kafka_container_name }} /{{ kafka_path }}/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1"
-      register: topic_list
-      changed_when: false
-      retries: 5
-      delay: 5
-      until: topic_list.rc == 0
+    - name: Push a topic for testing
       when: "'test-topic' not in topic_list.stdout"
+      block:
+        - name: Push a Kafka topic
+          ansible.builtin.command:
+            cmd: "podman exec {{ kafka_container_name }} /{{ kafka_path }}/kafka-topics.sh --create --topic test-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1"
+          register: topic_list
+          changed_when: false
+          retries: 5
+          delay: 5
+          until: topic_list.rc == 0
 
-    - name: Debug Kafka Topics
-      ansible.builtin.debug:
-        var: topic_list.stdout_lines
-      when: "'test-topic' not in topic_list.stdout"
+        - name: Debug Kafka Topics
+          ansible.builtin.debug:
+            var: topic_list.stdout_lines
