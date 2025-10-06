@@ -8,6 +8,7 @@
         rhelai_server: "{{ rhelai_server_input | default('rhelai') }}"
         rhelai_port: "{{ rhelai_port_input | default('8000') }}"
         rhelai_token: "{{ rhelai_token_input | default('ansible123!') }}"
+        rhelai_model: "{{ rhelai_model_input | default('granite-8b-lab-v1') }}"
 
     - name: Send POST request using uri module
       ansible.builtin.uri:
@@ -20,7 +21,7 @@
         body:
           prompt: "{{ gpt_prompt | default('What is the capital of the USA?') }}"
           max_tokens: "{{ max_tokens | default('50') }}"
-          model: "/root/.cache/instructlab/models/granite-8b-lab-v1"
+          model: "/root/.cache/instructlab/models/{{ rhelai_model }}"
           temperature: "{{ input_temperature | default(0) }}"
           top_p: "{{ input_top_p | default(1) }}"
           n: "{{ input_n | default(1) }}"
@@ -41,7 +42,7 @@
         body:
           prompt: "{{ rca_prompt }}"
           max_tokens: "{{ rca_max_tokens | default(500) }}"
-          model: "/root/.cache/instructlab/models/granite-8b-lab-v1"
+          model: "/root/.cache/instructlab/models/{{ rhelai_model }}"
           temperature: "{{ input_temperature | default(0.5) }}"
           top_p: "{{ input_top_p | default(1) }}"
           n: "{{ input_n | default(1) }}"
