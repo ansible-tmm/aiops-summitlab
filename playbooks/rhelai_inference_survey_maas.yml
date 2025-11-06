@@ -1,0 +1,78 @@
+---
+- name: Send API request and debug complete response
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Set internal facts for API connection
+      ansible.builtin.set_fact:
+        # Use underscore-prefixed variables to avoid overwriting incoming extra_vars
+        # Supports both existing format (rhelai_token from extra_vars) and new MaaS format
+        _rhelai_url_proto: "{{ rhelai_url_proto | default('http') }}"
+        _rhelai_server: "{{ rhelai_server | default('rhelai') }}"
+        _rhelai_port: "{{ rhelai_port | default('8000') }}"
+        _rhelai_model_name: "{{ rhelai_model_name | default('/root/.cache/instructlab/models/granite-8b-lab-v1') }}"
+        _rhelai_token: "{{ rhelai_token | default('') }}"
+
+    - name: Send POST request using uri module
+      ansible.builtin.uri:
+        url: "{{ _rhelai_url_proto }}://{{ _rhelai_server }}:{{ _rhelai_port }}/v1/completions"
+        method: POST
+        headers:
+          accept: "application/json"
+          Content-Type: "application/json"
+          Authorization: "Bearer {{ _rhelai_token }}"
+        body:
+          prompt: "{{ gpt_prompt | default('What is the capital of the USA?') }}"
+          max_tokens: "{{ max_tokens | default('50') }}"
+          model: "{{ _rhelai_model_name }}"
+          temperature: "{{ input_temperature | default(0) }}"
+          top_p: "{{ input_top_p | default(1) }}"
+          n: "{{ input_n | default(1) }}"
+        body_format: json
+        return_content: true
+        status_code: 200
+        timeout: 60
+      register: gpt_response
+
+    - name: Send RCA prompt to RHEL AI (Root Cause Analysis)
+      ansible.builtin.uri:
+        url: "{{ _rhelai_url_proto }}://{{ _rhelai_server }}:{{ _rhelai_port }}/v1/completions"
+        method: POST
+        headers:
+          accept: "application/json"
+          Content-Type: "application/json"
+          Authorization: "Bearer {{ _rhelai_token }}"
+        body:
+          prompt: "{{ rca_prompt }}"
+          max_tokens: "{{ rca_max_tokens | default(500) }}"
+          model: "{{ _rhelai_model_name }}"
+          temperature: "{{ input_temperature | default(0.5) }}"
+          top_p: "{{ input_top_p | default(1) }}"
+          n: "{{ input_n | default(1) }}"
+        body_format: json
+        return_content: true
+        status_code: 200
+        timeout: 120
+      register: rca_response
+
+    - name: Check if response is JSON and debug output
+      ansible.builtin.debug:
+        msg: "{{ gpt_response.json if gpt_response.json is defined else gpt_response.content }}"
+
+    - name: Check if response is JSON and debug rca output
+      ansible.builtin.debug:
+        msg: "{{ rca_response.json if rca_response.json is defined else rca_response.content }}"
+
+    - name: Set stats for next controller job
+      ansible.builtin.set_stats:
+        data:
+          gpt_response: "{{ gpt_response }}"
+          rca_response: "{{ rca_response }}"
+
+    - name: Debug gpt response
+      ansible.builtin.debug:
+        var: gpt_response
+
+    - name: Debug RCA response
+      ansible.builtin.debug:
+        var: rca_response
