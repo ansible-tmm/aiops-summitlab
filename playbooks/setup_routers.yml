@@ -11,10 +11,10 @@
     cisco.ios.config:
      src: ../templates/cisco-1.j2
      save_when: always
-    when: inventory_hostname == 'cisco-1'
+    when: inventory_hostname == 'cisco-rtr1'
 
   - name: Setup cisco-2
     cisco.ios.config:
      src: ../templates/cisco-2.j2
      save_when: always
-    when: inventory_hostname == 'cisco-2'
+    when: inventory_hostname == 'cisco-rtr2'
