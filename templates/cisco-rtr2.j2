@@ -1,0 +1,15 @@
+hostname cisco-rtr2
+!
+router ospf 1
+ router-id 192.168.2.2
+!
+interface Loopback0
+ ip address 192.168.2.2 255.255.255.255
+!
+interface Tunnel0
+ tunnel source GigabitEthernet1
+ ip address 100.100.100.2 255.255.255.0
+ ip mtu 1476
+ ip ospf 1 area 0
+ tunnel destination cisco-rtr1
+!

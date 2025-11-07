@@ -1,0 +1,19 @@
+hostname cisco-rtr1
+!
+router ospf 1
+ router-id 192.168.1.1
+!
+interface Loopback0
+ ip address 192.168.1.1 255.255.255.255
+!
+interface Tunnel0
+ tunnel source GigabitEthernet1
+ ip address 100.100.100.1 255.255.255.0
+ ip mtu 1476
+ ip ospf 1 area 0
+ tunnel destination cisco-rtr2
+!
+logging host bastion transport tcp port 5514
+!
+service timestamps debug datetime msec
+service timestamps log datetime msec

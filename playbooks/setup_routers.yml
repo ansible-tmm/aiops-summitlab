@@ -1,0 +1,20 @@
+---
+- name: Setup two routers for OSPF
+  hosts: 
+   - cisco-rtr1
+   - cisco-rtr2
+  gather_facts: false
+
+  tasks:
+
+  - name: Setup cisco-rtr1
+    cisco.ios.config:
+     src: ../templates/cisco-rtr1.j2
+     save_when: always
+    when: inventory_hostname == 'cisco-rtr1'
+
+  - name: Setup cisco-rtr2
+    cisco.ios.config:
+     src: ../templates/cisco-rtr2.j2
+     save_when: always
+    when: inventory_hostname == 'cisco-rtr2'
