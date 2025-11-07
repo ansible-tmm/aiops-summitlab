@@ -4,6 +4,8 @@
    - cisco-rtr1
    - cisco-rtr2
   gather_facts: false
+  vars:
+    bastion_ip: "{{ hostvars[groups['bastions'][0]]['ansible_host'] | default('bastion') }}"
 
   tasks:
 

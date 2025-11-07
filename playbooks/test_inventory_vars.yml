@@ -1,0 +1,33 @@
+---
+- name: Test inventory variables for bastion IP
+  hosts: cisco-rtr1
+  gather_facts: false
+  tasks:
+    - name: Show all groups available
+      debug:
+        var: groups
+
+    - name: Check if bastions group exists
+      debug:
+        msg: "Bastions group exists with {{ groups['bastions'] | length }} hosts"
+      when: "'bastions' in groups"
+
+    - name: Show bastions group members
+      debug:
+        var: groups['bastions']
+      when: "'bastions' in groups"
+
+    - name: Show first bastion hostname
+      debug:
+        msg: "First bastion: {{ groups['bastions'][0] }}"
+      when: "'bastions' in groups and groups['bastions'] | length > 0"
+
+    - name: Show bastion ansible_host variable
+      debug:
+        var: hostvars[groups['bastions'][0]]['ansible_host']
+      when: "'bastions' in groups and groups['bastions'] | length > 0"
+
+    - name: Show what bastion_ip would be
+      debug:
+        msg: "bastion_ip would be: {{ hostvars[groups['bastions'][0]]['ansible_host'] | default('bastion') }}"
+      when: "'bastions' in groups and groups['bastions'] | length > 0"

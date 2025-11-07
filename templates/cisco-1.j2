@@ -13,7 +13,7 @@ interface Tunnel0
  ip ospf 1 area 0
  tunnel destination {{ hostvars['cisco-rtr2']['ansible_host'] }}
 !
-logging host bastion transport tcp port 5514
+logging host {{ bastion_ip }} transport tcp port 5514
 !
 service timestamps debug datetime msec
 service timestamps log datetime msec
