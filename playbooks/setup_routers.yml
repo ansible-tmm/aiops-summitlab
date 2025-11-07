@@ -5,7 +5,9 @@
    - cisco-rtr2
   gather_facts: false
   vars:
-    bastion_ip: "{{ hostvars[groups['bastions'][0]]['ansible_host'] | default('bastion') }}"
+    # Set bastion_ip as extra var when running the job template
+    # or it will default to 'bastion' hostname
+    bastion_ip: "{{ bastion_ip | default('bastion') }}"
 
   tasks:
 
