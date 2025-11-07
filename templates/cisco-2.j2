@@ -11,5 +11,5 @@ interface Tunnel0
  ip address 100.100.100.2 255.255.255.0
  ip mtu 1476
  ip ospf 1 area 0
- tunnel destination cisco-1
+ tunnel destination {{ hostvars['cisco-rtr1']['ansible_host'] }}
 !
