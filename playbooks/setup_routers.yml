@@ -1,8 +1,8 @@
 ---
 - name: Setup two routers for OSPF
   hosts:
-   - cisco-1
-   - cisco-2
+   - cisco-rtr1
+   - cisco-rtr2
   gather_facts: false
 
   tasks:
