@@ -1,4 +1,4 @@
-hostname cisco-rtr2
+hostname cisco-2
 !
 router ospf 1
  router-id 192.168.2.2
@@ -11,5 +11,5 @@ interface Tunnel0
  ip address 100.100.100.2 255.255.255.0
  ip mtu 1476
  ip ospf 1 area 0
- tunnel destination cisco-rtr1
+ tunnel destination cisco-1
 !

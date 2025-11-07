@@ -1,4 +1,4 @@
-hostname cisco-rtr1
+hostname cisco-1
 !
 router ospf 1
  router-id 192.168.1.1
@@ -11,7 +11,7 @@ interface Tunnel0
  ip address 100.100.100.1 255.255.255.0
  ip mtu 1476
  ip ospf 1 area 0
- tunnel destination cisco-rtr2
+ tunnel destination cisco-2
 !
 logging host bastion transport tcp port 5514
 !
