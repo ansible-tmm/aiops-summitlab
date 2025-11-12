@@ -1,0 +1,69 @@
+---
+- name: Create Network AIOps Workflow
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Create Network AIOps Workflow Template
+      ansible.controller.workflow_job_template:
+        name: "Network AIOps Workflow"
+        description: "AI-driven network remediation workflow with human approval"
+        organization: "Default"
+        inventory: "network-inventory"
+        ask_variables_on_launch: true
+        state: present
+
+    - name: Add workflow node - Create Playbook AI (Entry Point)
+      ansible.controller.workflow_job_template_node:
+        identifier: "Create Playbook AI"
+        workflow_job_template: "Network AIOps Workflow"
+        unified_job_template:
+          name: "Network AIOps"
+          organization: "Default"
+          type: job_template
+        organization: "Default"
+        state: present
+        related:
+          success_nodes:
+            - identifier: "Playbook Check-mode"
+
+    - name: Add workflow node - Lightspeed Response Checkmode
+      ansible.controller.workflow_job_template_node:
+        identifier: "Playbook Check-mode"
+        workflow_job_template: "Network AIOps Workflow"
+        unified_job_template:
+          name: "Lightspeed Response Checkmode"
+          organization: "Default"
+          type: job_template
+        organization: "Default"
+        state: present
+        related:
+          success_nodes:
+            - identifier: "Human Review"
+
+    - name: Add workflow node - Human Review (Approval)
+      ansible.controller.workflow_job_template_node:
+        identifier: "Human Review"
+        workflow_job_template: "Network AIOps Workflow"
+        organization: "Default"
+        state: present
+        approval_node:
+          name: "Playbook Run-mode"
+          description: "Approve running the playbook in run mode."
+          timeout: 3600
+
+    - name: Add workflow node - Lightspeed Response Runmode
+      ansible.controller.workflow_job_template_node:
+        identifier: "Playbook Run-mode"
+        workflow_job_template: "Network AIOps Workflow"
+        unified_job_template:
+          name: "Lightspeed Response Runmode"
+          organization: "Default"
+          type: job_template
+        organization: "Default"
+        state: present
+
+    - name: Display workflow creation success
+      ansible.builtin.debug:
+        msg: "Network AIOps Workflow created successfully with all nodes configured"
