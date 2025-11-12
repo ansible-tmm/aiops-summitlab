@@ -1,0 +1,89 @@
+---
+- name: Initialize Gitea Lightspeed Playbook Repository
+  hosts: localhost
+  gather_facts: false
+  vars:
+    gitea_repo: "lightspeed_playbooks"
+    gitea_user: "lab-user"
+    gitea_email: "lab-user@example.org"
+    playbook_filename: "lightspeed-response-network.yml"
+    playbook_content: |
+      ---
+      # This playbook will be populated by Lightspeed AI
+      # Initial placeholder to prevent project sync failures
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - gitea_url is defined
+          - gitea_password is defined
+        fail_msg: "Required variables gitea_url and gitea_password are missing"
+
+    - name: Check if repository exists
+      ansible.builtin.uri:
+        url: "{{ gitea_url }}/api/v1/repos/{{ gitea_user }}/{{ gitea_repo }}"
+        method: GET
+        user: "{{ gitea_user }}"
+        password: "{{ gitea_password }}"
+        force_basic_auth: true
+        status_code: [200, 404]
+      register: repo_check
+
+    - name: Create repository if it doesn't exist
+      ansible.builtin.uri:
+        url: "{{ gitea_url }}/api/v1/user/repos"
+        method: POST
+        user: "{{ gitea_user }}"
+        password: "{{ gitea_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          name: "{{ gitea_repo }}"
+          private: false
+          auto_init: true
+        status_code: [201, 409]
+      when: repo_check.status == 404
+
+    - name: Wait for repository initialization
+      ansible.builtin.pause:
+        seconds: 5
+      when: repo_check.status == 404
+
+    - name: Check if playbook directory exists in repo
+      ansible.builtin.uri:
+        url: "{{ gitea_url }}/api/v1/repos/{{ gitea_user }}/{{ gitea_repo }}/contents/playbooks"
+        method: GET
+        user: "{{ gitea_user }}"
+        password: "{{ gitea_password }}"
+        force_basic_auth: true
+        status_code: [200, 404]
+      register: playbook_dir_check
+
+    - name: Check if lightspeed-response-network.yml exists
+      ansible.builtin.uri:
+        url: "{{ gitea_url }}/api/v1/repos/{{ gitea_user }}/{{ gitea_repo }}/contents/playbooks/{{ playbook_filename }}"
+        method: GET
+        user: "{{ gitea_user }}"
+        password: "{{ gitea_password }}"
+        force_basic_auth: true
+        status_code: [200, 404]
+      register: playbook_check
+
+    - name: Create empty lightspeed-response-network.yml playbook
+      ansible.builtin.uri:
+        url: "{{ gitea_url }}/api/v1/repos/{{ gitea_user }}/{{ gitea_repo }}/contents/playbooks/{{ playbook_filename }}"
+        method: POST
+        user: "{{ gitea_user }}"
+        password: "{{ gitea_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          message: "Initialize empty lightspeed-response-network.yml playbook"
+          content: "{{ playbook_content | b64encode }}"
+        status_code: [201, 409]
+      when: playbook_check.status == 404
+
+    - name: Display Gitea repository URL
+      ansible.builtin.debug:
+        msg: "Gitea lightspeed_playbooks repository initialized at {{ gitea_url }}/{{ gitea_user }}/{{ gitea_repo }}"
