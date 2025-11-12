@@ -1,10 +1,38 @@
 ---
-- name: Create Network AIOps Workflow
+- name: Create Network AIOps Workflow and Job Templates
   hosts: localhost
   connection: local
   gather_facts: false
 
   tasks:
+    - name: Create Lightspeed Response Checkmode job template
+      ansible.controller.job_template:
+        name: "Lightspeed Response Checkmode"
+        description: "Run AI-generated playbook in check mode"
+        organization: "Default"
+        job_type: "check"
+        inventory: "network-inventory"
+        project: "Lightspeed-Playbooks-Network"
+        playbook: "playbooks/lightspeed-response-network.yml"
+        credentials:
+          - "Network Credential"
+        verbosity: 1
+        state: present
+
+    - name: Create Lightspeed Response Runmode job template
+      ansible.controller.job_template:
+        name: "Lightspeed Response Runmode"
+        description: "Execute AI-generated playbook in run mode"
+        organization: "Default"
+        job_type: "run"
+        inventory: "network-inventory"
+        project: "Lightspeed-Playbooks-Network"
+        playbook: "playbooks/lightspeed-response-network.yml"
+        credentials:
+          - "Network Credential"
+        verbosity: 1
+        state: present
+
     - name: Create Network AIOps Workflow Template
       ansible.controller.workflow_job_template:
         name: "Network AIOps Workflow"
@@ -66,4 +94,4 @@
 
     - name: Display workflow creation success
       ansible.builtin.debug:
-        msg: "Network AIOps Workflow created successfully with all nodes configured"
+        msg: "Network AIOps Workflow and job templates created successfully"
