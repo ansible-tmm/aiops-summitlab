@@ -11,6 +11,13 @@
       ---
       # This playbook will be populated by Lightspeed AI
       # Initial placeholder to prevent project sync failures
+      - name: Placeholder
+        hosts: localhost
+        gather_facts: false
+        tasks:
+          - name: Placeholder task
+            ansible.builtin.debug:
+              msg: "This playbook will be replaced by AI-generated content"
 
   tasks:
     - name: Validate required variables

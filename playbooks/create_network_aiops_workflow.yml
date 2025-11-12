@@ -11,6 +11,10 @@
         wait: true
         timeout: 300
 
+    - name: Wait for project files to be available
+      ansible.builtin.pause:
+        seconds: 5
+
     - name: Create Lightspeed Response Checkmode job template
       ansible.controller.job_template:
         name: "Lightspeed Response Checkmode"
