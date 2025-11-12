@@ -1,0 +1,27 @@
+---
+- name: Configure firewall for EDA webhook listener
+  hosts: localhost
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Ensure firewalld is running
+      ansible.builtin.systemd:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: Open port 5000/tcp for EDA webhook listener
+      ansible.posix.firewalld:
+        port: 5000/tcp
+        permanent: true
+        state: enabled
+        immediate: true
+
+    - name: Verify port 5000 is open
+      ansible.builtin.command: firewall-cmd --list-ports
+      register: firewall_ports
+      changed_when: false
+
+    - name: Display open ports
+      ansible.builtin.debug:
+        msg: "Firewall ports: {{ firewall_ports.stdout }}"
