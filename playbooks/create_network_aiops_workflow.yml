@@ -58,9 +58,8 @@
           type: job_template
         organization: "Default"
         state: present
-        related:
-          success_nodes:
-            - identifier: "Playbook Check-mode"
+        success_nodes:
+          - identifier: "Playbook Check-mode"
 
     - name: Add workflow node - Lightspeed Response Checkmode
       ansible.controller.workflow_job_template_node:
@@ -72,9 +71,8 @@
           type: job_template
         organization: "Default"
         state: present
-        related:
-          success_nodes:
-            - identifier: "Human Review"
+        success_nodes:
+          - identifier: "Human Review"
 
     - name: Add workflow node - Human Review (Approval)
       ansible.controller.workflow_job_template_node:
@@ -83,9 +81,11 @@
         organization: "Default"
         state: present
         approval_node:
-          name: "Playbook Run-mode"
+          name: "Human Review Approval"
           description: "Approve running the playbook in run mode."
           timeout: 3600
+        success_nodes:
+          - identifier: "Playbook Run-mode"
 
     - name: Add workflow node - Lightspeed Response Runmode
       ansible.controller.workflow_job_template_node:
