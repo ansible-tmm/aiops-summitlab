@@ -67,10 +67,12 @@
               success_nodes:
                 - identifier: human_review
           - identifier: human_review
-            approval_node:
+            unified_job_template:
               name: "Human Review Approval"
               description: "Approve running the playbook in run mode"
-              timeout: 3600
+              organization:
+                name: Default
+              type: workflow_approval
             related:
               success_nodes:
                 - identifier: playbook_runmode
