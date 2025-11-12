@@ -47,56 +47,39 @@
         inventory: "network-inventory"
         ask_variables_on_launch: true
         state: present
-
-    - name: Add workflow node - Create Playbook AI (Entry Point)
-      ansible.controller.workflow_job_template_node:
-        identifier: "Create Playbook AI"
-        workflow_job_template: "Network AIOps Workflow"
-        unified_job_template:
-          name: "Network AIOps"
-          organization: "Default"
-          type: job_template
-        organization: "Default"
-        state: present
-        success_nodes:
-          - identifier: "Playbook Check-mode"
-
-    - name: Add workflow node - Lightspeed Response Checkmode
-      ansible.controller.workflow_job_template_node:
-        identifier: "Playbook Check-mode"
-        workflow_job_template: "Network AIOps Workflow"
-        unified_job_template:
-          name: "Lightspeed Response Checkmode"
-          organization: "Default"
-          type: job_template
-        organization: "Default"
-        state: present
-        success_nodes:
-          - identifier: "Human Review"
-
-    - name: Add workflow node - Human Review (Approval)
-      ansible.controller.workflow_job_template_node:
-        identifier: "Human Review"
-        workflow_job_template: "Network AIOps Workflow"
-        organization: "Default"
-        state: present
-        approval_node:
-          name: "Human Review Approval"
-          description: "Approve running the playbook in run mode."
-          timeout: 3600
-        success_nodes:
-          - identifier: "Playbook Run-mode"
-
-    - name: Add workflow node - Lightspeed Response Runmode
-      ansible.controller.workflow_job_template_node:
-        identifier: "Playbook Run-mode"
-        workflow_job_template: "Network AIOps Workflow"
-        unified_job_template:
-          name: "Lightspeed Response Runmode"
-          organization: "Default"
-          type: job_template
-        organization: "Default"
-        state: present
+        workflow_nodes:
+          - identifier: create_playbook_ai
+            unified_job_template:
+              name: "Network AIOps"
+              organization:
+                name: Default
+              type: job_template
+            related:
+              success_nodes:
+                - identifier: playbook_checkmode
+          - identifier: playbook_checkmode
+            unified_job_template:
+              name: "Lightspeed Response Checkmode"
+              organization:
+                name: Default
+              type: job_template
+            related:
+              success_nodes:
+                - identifier: human_review
+          - identifier: human_review
+            approval_node:
+              name: "Human Review Approval"
+              description: "Approve running the playbook in run mode"
+              timeout: 3600
+            related:
+              success_nodes:
+                - identifier: playbook_runmode
+          - identifier: playbook_runmode
+            unified_job_template:
+              name: "Lightspeed Response Runmode"
+              organization:
+                name: Default
+              type: job_template
 
     - name: Display workflow creation success
       ansible.builtin.debug:
