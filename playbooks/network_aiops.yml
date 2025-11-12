@@ -7,14 +7,23 @@
     gitea_repo: "lightspeed_playbooks"
     gitea_user: "lab-user"
     gitea_email: "lab-user@example.org"
+    # Original prompt (kept for reference):
+    # lightspeed_prompt: |
+    #    "Create a playbook and name it 'OSPF Fix'
+    #     host ==  cisco-rtr1
+    #     create a task that shows the status of Tunnel0 and register the output
+    #     run a new task that administratively enables interface for parent interface tunnel0 when stdout contains 'administratively down'
+    #     run a new task when the previous output contains 'line protocol is up' in stdout[0] in this task do a 'show ip ospf interface tunnel0' and register as new_output
+    #     run a new task with a list of two conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output doesn't contain 'Network Type POINT_TO_POINT' This task would then configure interface tunnel0 with the command 'ip ospf network type point_to_point'
+    #     run a new task with a list of three conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output does contain 'Network Type POINT_TO_POINT' the third condition is when new_output doesn't contain 'Hello 10' This task would then configure interface tunnel0 with the command 'ip ospf hello-interval 10'"
     lightspeed_prompt: |
        "Create a playbook and name it 'OSPF Fix'
-        host ==  cisco-rtr1 
-        create a task that shows the status of Tunnel0 and register the output 
-        run a new task that administratively enables interface for parent interface tunnel0 when stdout contains 'administratively down' 
-        run a new task when the previous output contains 'line protocol is up' in stdout[0] in this task do a 'show ip ospf interface tunnel0' and register as new_output 
-        run a new task with a list of two conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output doesn't contain 'Network Type POINT_TO_POINT' This task would then configure interface tunnel0 with the command 'ip ospf network type point_to_point'
-        run a new task with a list of three conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output does contain 'Network Type POINT_TO_POINT' the third condition is when new_output doesn't contain 'Hello 10' This task would then configure interface tunnel0 with the command 'ip ospf hello-interval 10'"
+        host ==  cisco-rtr1
+        create a task that shows the status of interface Tunnel0 using command 'show interface Tunnel0' and register the output
+        run a new task that administratively enables interface Tunnel0 when stdout contains 'administratively down' using parent interface Tunnel0
+        run a new task when the previous output contains 'line protocol is up' in stdout[0] in this task do a 'show ip ospf interface Tunnel0' and register as new_output
+        run a new task with a list of two conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output doesn't contain 'Network Type POINT_TO_POINT' This task would then configure interface Tunnel0 with the command 'ip ospf network point-to-point'
+        run a new task with a list of three conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output does contain 'Network Type POINT_TO_POINT' the third condition is when new_output doesn't contain 'Hello 10' This task would then configure interface Tunnel0 with the command 'ip ospf hello-interval 10'"
         
   tasks:
     - name: Include vars
