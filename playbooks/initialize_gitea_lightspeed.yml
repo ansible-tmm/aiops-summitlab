@@ -6,7 +6,7 @@
     gitea_repo: "lightspeed_playbooks"
     gitea_user: "lab-user"
     gitea_email: "lab-user@example.org"
-    playbook_filename: "lightspeed-response-network.yml"
+    playbook_filename: "playbooks/lightspeed-response-network.yml"
     playbook_content: |
       ---
       # This playbook will be populated by Lightspeed AI

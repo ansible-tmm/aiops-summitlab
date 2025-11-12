@@ -73,7 +73,7 @@
     - name: Remove any existing lightspeed-response-network.yml
       ansible.builtin.file:
         state: absent
-        path: "{{ repository['path'] }}/lightspeed-response-network.yml"
+        path: "{{ repository['path'] }}/playbooks/lightspeed-response-network.yml"
 
     - name: Publish the removal changes to Gitea
       ansible.scm.git_publish:
@@ -96,10 +96,16 @@
       delegate_to: localhost
       run_once: true
       
+    - name: Ensure playbooks directory exists
+      ansible.builtin.file:
+        path: "{{ repository['path'] }}/playbooks"
+        state: directory
+        mode: '0755'
+
     - name: Save Lightspeed generated playbook to repository
       ansible.builtin.copy:
         content: "{{ lightspeed_playbook | to_nice_yaml(sort_keys=False) }}"
-        dest: "{{ repository['path'] }}/lightspeed-response-network.yml"
+        dest: "{{ repository['path'] }}/playbooks/lightspeed-response-network.yml"
         mode: '0644'
 
     - name: Publish the new playbook to Gitea
@@ -113,4 +119,4 @@
 
     - name: Display repository path
       ansible.builtin.debug:
-        msg: "Lightspeed playbook saved to {{ repository['path'] }}/lightspeed-response-network.yml"
+        msg: "Lightspeed playbook saved to {{ repository['path'] }}/playbooks/lightspeed-response-network.yml"
