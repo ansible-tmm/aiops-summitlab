@@ -1,0 +1,116 @@
+---
+- name: Interact with Ansible Lightspeed API and Generate OSPF Fix Playbook
+  hosts: localhost
+  gather_facts: false
+  vars:
+    lightspeed_url: "https://c.ai.ansible.redhat.com/api/v0/ai/generations/"
+    gitea_repo: "lightspeed_playbooks"
+    gitea_user: "lab-user"
+    gitea_email: "lab-user@example.org"
+    lightspeed_prompt: |
+       "Create a playbook and name it 'OSPF Fix'
+        host ==  cisco-rtr1 
+        create a task that shows the status of Tunnel0 and register the output 
+        run a new task that administratively enables interface for parent interface tunnel0 when stdout contains 'administratively down' 
+        run a new task when the previous output contains 'line protocol is up' in stdout[0] in this task do a 'show ip ospf interface tunnel0' and register as new_output 
+        run a new task with a list of two conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output doesn't contain 'Network Type POINT_TO_POINT' This task would then configure interface tunnel0 with the command 'ip ospf network type point_to_point'
+        run a new task with a list of three conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output does contain 'Network Type POINT_TO_POINT' the third condition is when new_output doesn't contain 'Hello 10' This task would then configure interface tunnel0 with the command 'ip ospf hello-interval 10'"
+        
+  tasks:
+    - name: Include vars
+      ansible.builtin.include_vars:
+        file: "../vars/ls_vars.yml"
+
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - gitea_url is defined
+          - gitea_url | length > 0
+          - lightspeed_wca_token is defined
+        fail_msg: "Required variables are missing. Ensure gitea_url and lightspeed_wca_token are defined."
+        success_msg: "All required variables are present."
+
+    - name: Send request to Ansible Lightspeed API
+      ansible.builtin.uri:
+        url: "{{ lightspeed_url }}"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Bearer {{ lightspeed_wca_token }}"
+        body_format: json
+        body:
+          text: "{{ lightspeed_prompt }}"
+      register: response
+
+    - name: Display Lightspeed API response
+      ansible.builtin.debug:
+        msg: "{{ response.json }}"
+
+    - name: Set fact for Ansible Lightspeed generated playbook
+      ansible.builtin.set_fact:
+        lightspeed_playbook: "{{ response.json.playbook | from_yaml }}"
+
+    - name: Display generated playbook in JSON format
+      ansible.builtin.debug:
+        msg: "{{ lightspeed_playbook }}"
+
+    - name: Display generated playbook in YAML format
+      ansible.builtin.debug:
+        msg: "{{ lightspeed_playbook | to_nice_yaml(sort_keys=False) }}"
+
+    - name: Retrieve Gitea repository
+      ansible.scm.git_retrieve:
+        branch:
+          duplicate_detection: false
+          name: main
+        origin:
+          url: "https://{{ gitea_user }}:{{ gitea_password }}@{{ gitea_url | regex_replace('^https?://', '') }}/{{ gitea_user }}/{{ gitea_repo }}.git"
+        parent_directory: /tmp/
+      register: repository
+      delegate_to: localhost
+      run_once: true
+
+    - name: Remove any existing lightspeed-response.yml
+      ansible.builtin.file:
+        state: absent
+        path: "{{ repository['path'] }}/playbooks/lightspeed-response.yml"
+
+    - name: Publish the removal changes to Gitea
+      ansible.scm.git_publish:
+        path: "{{ repository['path'] }}"
+        user:
+          name: "{{ gitea_user }}"
+          email: "{{ gitea_email }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Retrieve Gitea repository again for fresh state
+      ansible.scm.git_retrieve:
+        branch:
+          duplicate_detection: false
+          name: main
+        origin:
+          url: "https://{{ gitea_user }}:{{ gitea_password }}@{{ gitea_url | regex_replace('^https?://', '') }}/{{ gitea_user }}/{{ gitea_repo }}.git"
+        parent_directory: /tmp/
+      register: repository
+      delegate_to: localhost
+      run_once: true
+      
+    - name: Save Lightspeed generated playbook to repository
+      ansible.builtin.copy:
+        content: "{{ lightspeed_playbook | to_nice_yaml(sort_keys=False) }}"
+        dest: "{{ repository['path'] }}/playbooks/lightspeed-response.yml"
+        mode: '0644'
+
+    - name: Publish the new playbook to Gitea
+      ansible.scm.git_publish:
+        path: "{{ repository['path'] }}"
+        user:
+          name: "{{ gitea_user }}"
+          email: "{{ gitea_email }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Display repository path
+      ansible.builtin.debug:
+        msg: "Lightspeed playbook saved to {{ repository['path'] }}/playbooks/lightspeed-response.yml"
