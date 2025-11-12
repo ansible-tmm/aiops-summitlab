@@ -19,7 +19,7 @@
         job_type: "check"
         inventory: "network-inventory"
         project: "Lightspeed-Playbooks-Network"
-        playbook: "playbooks/lightspeed-response-network.yml"
+        playbook: lightspeed-response-network.yml"
         credentials:
           - "Network Credential"
         verbosity: 1
@@ -33,7 +33,7 @@
         job_type: "run"
         inventory: "network-inventory"
         project: "Lightspeed-Playbooks-Network"
-        playbook: "playbooks/lightspeed-response-network.yml"
+        playbook: "lightspeed-response-network.yml"
         credentials:
           - "Network Credential"
         verbosity: 1
