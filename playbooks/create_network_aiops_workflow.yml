@@ -5,6 +5,12 @@
   gather_facts: false
 
   tasks:
+    - name: Sync Lightspeed-Playbooks-Network project
+      ansible.controller.project_update:
+        project: "Lightspeed-Playbooks-Network"
+        wait: true
+        timeout: 300
+
     - name: Create Lightspeed Response Checkmode job template
       ansible.controller.job_template:
         name: "Lightspeed Response Checkmode"
