@@ -5,6 +5,16 @@
   gather_facts: false
 
   tasks:
+    - name: Get project details to find SCM URL
+      ansible.controller.project:
+        name: "Lightspeed-Playbooks-Network"
+        state: present
+      register: project_info
+
+    - name: Display project info
+      ansible.builtin.debug:
+        var: project_info
+
     - name: Sync Lightspeed-Playbooks-Network project
       ansible.controller.project_update:
         project: "Lightspeed-Playbooks-Network"
@@ -14,6 +24,12 @@
     - name: Wait for project files to be available
       ansible.builtin.pause:
         seconds: 5
+
+    - name: Sync project again to ensure files are picked up
+      ansible.controller.project_update:
+        project: "Lightspeed-Playbooks-Network"
+        wait: true
+        timeout: 300
 
     - name: Create Lightspeed Response Checkmode job template
       ansible.controller.job_template:
