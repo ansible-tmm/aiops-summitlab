@@ -1,6 +1,6 @@
 ---
 - name: Configure firewall for EDA webhook listener
-  hosts: controller
+  hosts: localhost
   gather_facts: false
   become: true
   tasks:
