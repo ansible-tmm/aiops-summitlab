@@ -36,7 +36,7 @@
 
     - name: Send RCA prompt to RHEL AI (Root Cause Analysis)
       ansible.builtin.uri:
-        url: "http://{{ rhelai_server }}:{{ rhelai_port }}/v1/completions"
+        url: "{{ _rhelai_url_proto }}://{{ rhelai_server }}:{{ rhelai_port }}/v1/completions"
         method: POST
         headers:
           accept: "application/json"
@@ -45,7 +45,7 @@
         body:
           prompt: "{{ rca_prompt }}"
           max_tokens: "{{ rca_max_tokens | default(500) }}"
-          model: "/root/.cache/instructlab/models/granite-8b-lab-v1"
+          model: "{{ rhelai_model_name_input }}"
           temperature: "{{ input_temperature | default(0.5) }}"
           top_p: "{{ input_top_p | default(1) }}"
           n: "{{ input_n | default(1) }}"
