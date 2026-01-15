@@ -1,0 +1,26 @@
+---
+- name: "Listen for OSPF neighbor events on a webhook"
+  hosts: all
+
+  sources:
+    - name: "Webhook listener for OSPF events"
+      ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+
+  rules:
+    - name: "Process OSPF neighbor event from webhook"
+      condition: event.payload.search_name == 'ospf-neighbor'
+      actions:
+        - debug:
+            msg: |
+              ✅ OSPF Webhook Received!
+              Search Name: {{ event.payload.search_name }}
+              Triggering workflow...
+
+        - run_workflow_template:
+            name: "Network-AIOps-Workflow"
+            organization: "Default"
+            job_args:
+              extra_vars:
+                webhook_payload: "{{ event.payload }}"
