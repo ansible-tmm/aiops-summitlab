@@ -5,6 +5,7 @@
   tasks:
     - name: Set facts
       ansible.builtin.set_fact:
+        _rhelai_url_proto: "{{ rhelai_url_proto | default('http') }}"
         rhelai_server: "{{ rhelai_server_input | default('rhelai') }}"
         rhelai_port: "{{ rhelai_port_input | default('8000') }}"
         rhelai_token: "{{ rhelai_token_input | default('ansible123!') }}"
@@ -14,7 +15,7 @@
 
     - name: Send POST request using uri module
       ansible.builtin.uri:
-        url: "http://{{ rhelai_server }}:{{ rhelai_port }}/v1/completions"
+        url: "{{ _rhelai_url_proto }}://{{ rhelai_server }}:{{ rhelai_port }}/v1/completions"
         method: POST
         headers:
           accept: "application/json"
