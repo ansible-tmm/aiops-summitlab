@@ -61,7 +61,7 @@
 
     - name: Create Network AIOps Workflow Template
       ansible.controller.workflow_job_template:
-        name: "Network AIOps Workflow"
+        name: "Network-AIOps-Workflow"
         description: "AI-driven network remediation workflow with human approval"
         organization: "Default"
         inventory: "network-inventory"
