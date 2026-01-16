@@ -16,7 +16,7 @@
       "question_description": "This area shows you that AI was able to understand the error and create a prompt for Ansible Lightspeed.",
       "variable": "ai_lightspeed_prompt",
       "required": false,
-      "default": "{{ gpt_generated_prompt }}"
+      "default": {{ gpt_generated_prompt | to_json }}
     }
   ]
 }
