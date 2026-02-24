@@ -1,0 +1,22 @@
+---
+- name: Toggle Windows Firewall to Generate Events
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Disable Windows Firewall (Domain profile)
+      ansible.windows.win_shell: |
+        Set-NetFirewallProfile -Profile Domain -Enabled False
+      register: disable_result
+
+    - name: Wait for event to be logged
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Re-enable Windows Firewall (Domain profile)
+      ansible.windows.win_shell: |
+        Set-NetFirewallProfile -Profile Domain -Enabled True
+      register: enable_result
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: "Firewall toggled successfully. Firewall events should now be in the Windows Event Log."

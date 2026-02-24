@@ -1,0 +1,23 @@
+---
+- name: Create AD User Account to Trigger Event ID 4722
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Generate unique username
+      ansible.builtin.set_fact:
+        ad_test_username: "TestUser-{{ lookup('pipe', 'date +%s') | hash('md5') | truncate(6, True, '') }}"
+
+    - name: Create a test AD user account
+      microsoft.ad.user:
+        name: "{{ ad_test_username }}"
+        firstname: "Test"
+        surname: "User"
+        password: "P@ssw0rd123!"
+        state: present
+        enabled: true
+        path: "CN=Users,{{ ad_domain_dn | default('DC=ad,DC=lab,DC=local') }}"
+      register: ad_user_result
+
+    - name: Display created user info
+      ansible.builtin.debug:
+        msg: "Created AD user: {{ ad_test_username }} - Event ID 4722 should now be in the Security log"
