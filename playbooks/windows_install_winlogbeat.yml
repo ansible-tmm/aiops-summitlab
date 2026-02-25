@@ -1,0 +1,84 @@
+---
+- name: Install and Configure Winlogbeat on Windows
+  hosts: all
+  gather_facts: false
+  vars:
+    winlogbeat_version: "8.17.0"
+    winlogbeat_kafka_brokers: "service1:9092"
+    winlogbeat_kafka_topic: "windows-events"
+
+  tasks:
+    - name: Wait for Windows host to be reachable
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+        delay: 30
+
+    - name: Create temp directory for Winlogbeat
+      ansible.windows.win_file:
+        path: 'C:\Temp'
+        state: directory
+
+    - name: Download Winlogbeat ZIP
+      ansible.windows.win_get_url:
+        url: "https://artifacts.elastic.co/downloads/beats/winlogbeat/winlogbeat-{{ winlogbeat_version }}-windows-x86_64.zip"
+        dest: 'C:\Temp\winlogbeat.zip'
+        force: false
+
+    - name: Extract Winlogbeat
+      community.windows.win_unzip:
+        src: 'C:\Temp\winlogbeat.zip'
+        dest: 'C:\Program Files\Winlogbeat'
+        creates: 'C:\Program Files\Winlogbeat\winlogbeat-{{ winlogbeat_version }}-windows-x86_64'
+
+    - name: Deploy Winlogbeat configuration
+      ansible.windows.win_copy:
+        content: |
+          winlogbeat.event_logs:
+            - name: Security
+              event_id: 4720, 4722, 4725, 4726
+              level: information, warning, error
+            - name: Microsoft-Windows-Windows Firewall With Advanced Security/Firewall
+              level: information, warning, error
+            - name: System
+              event_id: 7036, 7040, 7045
+              level: information, warning, error
+
+          processors:
+            - add_host_metadata: ~
+            - add_fields:
+                target: ''
+                fields:
+                  source_type: windows_event
+
+          output.kafka:
+            hosts: ["{{ winlogbeat_kafka_brokers }}"]
+            topic: "{{ winlogbeat_kafka_topic }}"
+            codec.json:
+              pretty: false
+            required_acks: 1
+            compression: gzip
+            max_message_bytes: 1000000
+
+          logging.level: info
+        dest: 'C:\Program Files\Winlogbeat\winlogbeat-{{ winlogbeat_version }}-windows-x86_64\winlogbeat.yml'
+
+    - name: Install Winlogbeat as a Windows service
+      ansible.windows.win_shell: |
+        if (-not (Get-Service -Name winlogbeat -ErrorAction SilentlyContinue)) {
+          cd 'C:\Program Files\Winlogbeat\winlogbeat-{{ winlogbeat_version }}-windows-x86_64'
+          PowerShell.exe -ExecutionPolicy UnRestricted -File .\install-service-winlogbeat.ps1
+        }
+
+    - name: Start Winlogbeat service
+      ansible.windows.win_service:
+        name: winlogbeat
+        start_mode: auto
+        state: started
+
+    - name: Verify Winlogbeat is running
+      ansible.windows.win_shell: Get-Service winlogbeat | Select-Object Status, Name
+      register: winlogbeat_status
+
+    - name: Display Winlogbeat status
+      ansible.builtin.debug:
+        msg: "{{ winlogbeat_status.stdout_lines }}"
