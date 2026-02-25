@@ -23,6 +23,7 @@
         url: "https://artifacts.elastic.co/downloads/beats/winlogbeat/winlogbeat-{{ winlogbeat_version }}-windows-x86_64.zip"
         dest: 'C:\Temp\winlogbeat.zip'
         force: false
+        timeout: 300
 
     - name: Extract Winlogbeat
       community.windows.win_unzip:
