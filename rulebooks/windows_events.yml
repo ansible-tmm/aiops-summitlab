@@ -8,9 +8,9 @@
         topic: windows-events
 
   rules:
-    # Scenario 1: AD Account Creation (Event ID 4722 - account enabled)
-    - name: AD account enabled detected
-      condition: event.body.winlog.event_id == 4722
+    # Scenario 1: Account Creation (Event ID 4720 - created, 4722 - enabled)
+    - name: Account creation detected
+      condition: event.body.winlog.event_id == 4720 or event.body.winlog.event_id == 4722
       action:
         run_job_template:
           organization: "Default"
