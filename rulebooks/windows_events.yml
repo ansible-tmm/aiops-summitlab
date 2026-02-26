@@ -14,7 +14,7 @@
       action:
         run_job_template:
           organization: "Default"
-          name: "📋 Windows: Create Mattermost Ticket"
+          name: "Windows: Create Mattermost Ticket"
           job_args:
             extra_vars:
               windows_event_id: "{{ event.body.winlog.event_id }}"
@@ -34,7 +34,7 @@
       action:
         run_job_template:
           organization: "Default"
-          name: "🤖 Windows AI: Analyze and Ticket"
+          name: "Windows AI: Analyze and Ticket"
           job_args:
             extra_vars:
               windows_event_id: "{{ event.body.winlog.event_id }}"
