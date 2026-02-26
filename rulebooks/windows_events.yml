@@ -25,9 +25,10 @@
 
     # Scenario 2: Windows Firewall change detected (rule add/remove for LabTestRule-AIOps)
     - name: Windows Firewall change detected
-      condition: >
-        (event.body.winlog.event_id == "2004" or event.body.winlog.event_id == "2005")
-        and event.body.message contains "LabTestRule"
+      condition:
+        all:
+          - event.body.winlog.event_id == "2004" or event.body.winlog.event_id == "2005"
+          - event.body.message contains "LabTestRule"
       action:
         run_job_template:
           organization: "Default"
