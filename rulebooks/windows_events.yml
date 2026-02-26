@@ -10,7 +10,7 @@
   rules:
     # Scenario 1: Account Creation (Event ID 4720 - created, 4722 - enabled)
     - name: Account creation detected
-      condition: event.body.winlog.event_id == 4720 or event.body.winlog.event_id == 4722
+      condition: event.body.winlog.event_id == "4720" or event.body.winlog.event_id == "4722"
       action:
         run_job_template:
           organization: "Default"
@@ -26,11 +26,11 @@
     # Scenario 2: Windows Firewall change detected
     - name: Windows Firewall change detected
       condition: >
-        event.body.winlog.event_id == 4946
-        or event.body.winlog.event_id == 4950
-        or event.body.winlog.event_id == 2004
-        or event.body.winlog.event_id == 2005
-        or event.body.winlog.event_id == 2006
+        event.body.winlog.event_id == "4946"
+        or event.body.winlog.event_id == "4950"
+        or event.body.winlog.event_id == "2004"
+        or event.body.winlog.event_id == "2005"
+        or event.body.winlog.event_id == "2006"
       action:
         run_job_template:
           organization: "Default"
