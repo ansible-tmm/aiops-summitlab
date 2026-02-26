@@ -1,22 +1,27 @@
 ---
-- name: Toggle Windows Firewall to Generate Events
+- name: Simulate Suspicious Firewall Rule Change
   hosts: all
   gather_facts: false
   tasks:
-    - name: Disable Windows Firewall (Domain profile)
+    - name: Add suspicious inbound firewall rule
       ansible.windows.win_shell: |
-        Set-NetFirewallProfile -Profile Domain -Enabled False
-      register: disable_result
+        New-NetFirewallRule -DisplayName "LabTestRule-AIOps" `
+          -Direction Inbound `
+          -Action Allow `
+          -Protocol TCP `
+          -LocalPort 9999 `
+          -Description "AIOps lab test rule"
+      register: add_result
 
     - name: Wait for event to be logged
       ansible.builtin.pause:
         seconds: 5
 
-    - name: Re-enable Windows Firewall (Domain profile)
+    - name: Remove the firewall rule
       ansible.windows.win_shell: |
-        Set-NetFirewallProfile -Profile Domain -Enabled True
-      register: enable_result
+        Remove-NetFirewallRule -DisplayName "LabTestRule-AIOps"
+      register: remove_result
 
     - name: Display result
       ansible.builtin.debug:
-        msg: "Firewall toggled successfully. Firewall events should now be in the Windows Event Log."
+        msg: "Firewall rule added and removed. Events 2004 and 2005 should now be in the Windows Event Log."
