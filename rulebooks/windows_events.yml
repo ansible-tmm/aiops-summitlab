@@ -23,11 +23,9 @@
               windows_source_account: "{{ event.body.winlog.event_data.SubjectUserName | default('unknown') }}"
               ticket_type: "ad_account_creation"
 
-    # Scenario 2: Windows Firewall change detected
+    # Scenario 2: Windows Firewall rule added for LabTestRule-AIOps
     - name: Windows Firewall change detected
-      condition: >
-        event.body.winlog.event_id == "2004"
-        or event.body.winlog.event_id == "2005"
+      condition: event.body.winlog.event_id == "2004" and event.body.message matches ".*LabTestRule.*"
       action:
         run_job_template:
           organization: "Default"
