@@ -1,0 +1,43 @@
+---
+- name: Create Mattermost Ticket from Windows Event
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    mattermost_token: ""
+    mattermost_instance: ""
+
+  tasks:
+    - name: Fail if required variables are not set
+      ansible.builtin.fail:
+        msg: "Both Mattermost Instance and token must be set!"
+      when: mattermost_instance | default('') | trim == '' or mattermost_token | default('') | trim == ''
+
+    - name: Send AD Account Creation ticket to Mattermost
+      community.general.mattermost:
+        url: "{{ mattermost_instance }}"
+        api_key: "{{ mattermost_token }}"
+        attachments:
+          - text: "🎫 NEW TICKET: Active Directory Account Event"
+            color: "#0066cc"
+            title: "Windows Event ID {{ windows_event_id }} - User Account Management"
+            fields:
+              - title: Event Type
+                value: "AD Account Creation/Enablement"
+                short: true
+              - title: Event ID
+                value: "{{ windows_event_id }}"
+                short: true
+              - title: Target Account
+                value: "{{ windows_target_account | default('N/A') }}"
+                short: true
+              - title: Initiated By
+                value: "{{ windows_source_account | default('N/A') }}"
+                short: true
+              - title: Description
+                value: "{{ windows_event_description | default('No description available') }}"
+                short: false
+              - title: Ticket Status
+                value: "OPEN - Awaiting Review"
+                short: true
+      delegate_to: localhost

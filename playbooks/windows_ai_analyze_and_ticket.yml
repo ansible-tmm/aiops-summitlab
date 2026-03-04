@@ -1,0 +1,76 @@
+---
+- name: Analyze Windows Event with AI and Create Enriched Ticket
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    mattermost_token: ""
+    mattermost_instance: ""
+
+  tasks:
+    - name: Fail if required variables are not set
+      ansible.builtin.fail:
+        msg: "Both Mattermost Instance and token must be set!"
+      when: mattermost_instance | default('') | trim == '' or mattermost_token | default('') | trim == ''
+
+    - name: Send Windows event to AI for analysis
+      ansible.builtin.uri:
+        url: "{{ rhelai_url_proto }}://{{ rhelai_server }}:{{ rhelai_port }}/v1/completions"
+        method: POST
+        headers:
+          accept: "application/json"
+          Content-Type: "application/json"
+          Authorization: "Bearer {{ rhelai_token }}"
+        body:
+          prompt: |
+            ### Instructions:
+            You are a Windows system administrator assistant. Analyze the following Windows Event Log entry.
+            Explain what this event means, what security implications it has, and provide 3 recommended actions.
+            Keep your response concise (under 200 words).
+
+            ### Windows Event ID: {{ windows_event_id }}
+            ### Event Message: {{ windows_event_message | default('No message available') }}
+
+            ### Analysis:
+          max_tokens: 500
+          model: "{{ rhelai_model_name }}"
+          temperature: 0.3
+        body_format: json
+        return_content: true
+        status_code: 200
+        timeout: 120
+      register: ai_response
+
+    - name: Set AI analysis fact
+      ansible.builtin.set_fact:
+        ai_analysis: "{{ ai_response.json.choices[0].text | default('No AI analysis available') | trim }}"
+
+    - name: Debug AI response
+      ansible.builtin.debug:
+        msg: "{{ ai_analysis }}"
+
+    - name: Send AI-enriched Windows Firewall ticket to Mattermost
+      community.general.mattermost:
+        url: "{{ mattermost_instance }}"
+        api_key: "{{ mattermost_token }}"
+        attachments:
+          - text: "🔥 FIREWALL ALERT: Windows Firewall Event Detected"
+            color: "#ff6600"
+            title: "Windows Event ID {{ windows_event_id }} - AI Analyzed"
+            fields:
+              - title: Event ID
+                value: "{{ windows_event_id }}"
+                short: true
+              - title: Event Type
+                value: "Windows Firewall Change"
+                short: true
+              - title: Event Description
+                value: "{{ windows_event_message | default('N/A') }}"
+                short: false
+              - title: "🤖 AI Analysis"
+                value: "{{ ai_analysis }}"
+                short: false
+              - title: Ticket Status
+                value: "OPEN - AI-Enriched - Awaiting Review"
+                short: true
+      delegate_to: localhost
