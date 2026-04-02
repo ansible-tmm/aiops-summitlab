@@ -1,0 +1,27 @@
+---
+# Simulates a RHEL service failure by stopping crond.
+# Run this on node1 to trigger the Splunk alert -> EDA pipeline.
+- name: Simulate RHEL service failure
+  hosts: all
+  gather_facts: false
+
+  vars:
+    target_service: "crond"
+
+  tasks:
+    - name: Stop {{ target_service }} to simulate failure
+      ansible.builtin.systemd:
+        name: "{{ target_service }}"
+        state: stopped
+
+    - name: Log the simulated failure via logger
+      ansible.builtin.command:
+        cmd: >-
+          logger -p daemon.err -t ansible-lab
+          "SERVICE FAILURE: {{ target_service }} has stopped unexpectedly on {{ inventory_hostname }}"
+
+    - name: Display simulation status
+      ansible.builtin.debug:
+        msg: >-
+          {{ target_service }} stopped on {{ inventory_hostname }}.
+          Splunk should detect this within 30 seconds and fire the alert.

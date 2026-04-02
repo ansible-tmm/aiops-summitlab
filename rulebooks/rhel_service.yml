@@ -1,0 +1,31 @@
+---
+# EDA Rulebook: RHEL Service Down
+# Listens for Splunk webhook alerts about RHEL service failures.
+# Triggers the RHEL-Self-Healing workflow.
+- name: "Listen for RHEL service alerts from Splunk"
+  hosts: all
+
+  sources:
+    - name: "Webhook listener for RHEL service events"
+      ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+
+  rules:
+    - name: "Process RHEL service failure from Splunk"
+      condition: event.payload.search_name == 'rhel-service-down'
+      actions:
+        - debug:
+            msg: |
+              RHEL Service Alert Received!
+              Search Name: {{ event.payload.search_name }}
+              Result: {{ event.payload.result | default('N/A') }}
+              Triggering RHEL self-healing workflow...
+
+        - run_workflow_template:
+            name: "RHEL-Self-Healing"
+            organization: "Default"
+            job_args:
+              extra_vars:
+                webhook_payload: "{{ event.payload }}"
+                input_linux_service: "crond"

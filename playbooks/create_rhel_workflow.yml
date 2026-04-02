@@ -1,0 +1,30 @@
+---
+# Creates the RHEL-Self-Healing workflow template in AAP.
+# Initially contains only a Mattermost notification step.
+# Students add the remediation job template during the lab.
+- name: Create RHEL Self-Healing Workflow
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Create RHEL Self-Healing Workflow Template
+      ansible.controller.workflow_job_template:
+        name: "RHEL-Self-Healing"
+        description: "Self-healing workflow for RHEL service failures"
+        organization: "Default"
+        inventory: "lab-inventory"
+        state: present
+        workflow_nodes:
+          - identifier: notify_mattermost
+            unified_job_template:
+              name: "Notify via Mattermost - RHEL"
+              organization:
+                name: Default
+              type: job_template
+
+    - name: Display workflow creation status
+      ansible.builtin.debug:
+        msg: >-
+          RHEL-Self-Healing workflow created with Mattermost notification.
+          Students will add the remediation job template during the lab.
