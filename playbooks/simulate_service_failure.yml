@@ -15,12 +15,6 @@
         name: "{{ target_service }}"
         state: stopped
 
-    - name: Log the simulated failure via logger
-      ansible.builtin.command:
-        cmd: >-
-          logger -p daemon.err -t ansible-lab
-          "SERVICE FAILURE: {{ target_service }} has stopped unexpectedly on {{ inventory_hostname }}"
-
     - name: Display simulation status
       ansible.builtin.debug:
         msg: >-
