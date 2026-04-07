@@ -4,6 +4,7 @@
 - name: Simulate RHEL service failure
   hosts: all
   gather_facts: false
+  become: true
 
   vars:
     target_service: "crond"
