@@ -17,7 +17,8 @@
     agent_venv: "{{ agent_home }}/.venv/bin"
     agent_cmd: >-
       source {{ agent_home }}/.bashrc &&
-      {{ agent_venv }}/python3 {{ agent_script }}
+      export CREWAI_TRACING_ENABLED=false &&
+      echo n | {{ agent_venv }}/python3 {{ agent_script }}
     mattermost_instance: ""
     mattermost_token: ""
 
@@ -33,7 +34,7 @@
 
     - name: Triage result
       ansible.builtin.debug:
-        msg: "{{ triage_output.stdout }}"
+        msg: "{{ triage_output.stdout_lines | reject('search', '╭|╰|│|Tracing|traces|Would you like') | list | join('\n') }}"
 
     - name: "Stage 2: Execute - Running remediation"
       ansible.builtin.shell: |
@@ -46,7 +47,7 @@
 
     - name: Execution result
       ansible.builtin.debug:
-        msg: "{{ execute_output.stdout }}"
+        msg: "{{ execute_output.stdout_lines | reject('search', '╭|╰|│|Tracing|traces|Would you like') | list | join('\n') }}"
 
     - name: "Stage 3: Report - Generating incident summary"
       ansible.builtin.shell: |
@@ -59,7 +60,7 @@
 
     - name: Incident report
       ansible.builtin.debug:
-        msg: "{{ report_output.stdout }}"
+        msg: "{{ report_output.stdout_lines | reject('search', '╭|╰|│|Tracing|traces|Would you like') | list | join('\n') }}"
 
     - name: Extract report result
       ansible.builtin.set_fact:
