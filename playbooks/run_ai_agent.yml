@@ -62,25 +62,30 @@
       ansible.builtin.debug:
         msg: "{{ report_output.stdout_lines | reject('search', '╭|╰|│|Tracing|traces|Would you like') | list | join('\n') }}"
 
-    - name: Extract report result
+    - name: Extract report result lines
       ansible.builtin.set_fact:
-        agent_result_lines: |-
-          {%- set ns = namespace(capture=false) -%}
+        agent_result_list: >-
+          {%- set ns = namespace(capture=false, lines=[]) -%}
           {%- for line in report_output.stdout_lines -%}
-          {%- if line | trim == 'RESULT' -%}
-          {%- set ns.capture = true -%}
-          {%- elif ns.capture and '===' not in line and 'Tracing' not in line and '│' not in line and '╭' not in line and '╰' not in line and line | trim | length > 0 -%}
-          {{ line }}
-          {%- endif -%}
+            {%- if line | trim == 'RESULT' -%}
+              {%- set ns.capture = true -%}
+            {%- elif ns.capture and '===' not in line and 'Tracing' not in line and '│' not in line and '╭' not in line and '╰' not in line and 'Would you like' not in line and line | trim | length > 0 -%}
+              {%- set _ = ns.lines.append(line | trim) -%}
+            {%- endif -%}
           {%- endfor -%}
+          {{ ns.lines }}
+
+    - name: Format report for Mattermost
+      ansible.builtin.set_fact:
+        agent_report: "{{ agent_result_list | regex_replace('(PROBLEM:)', '**PROBLEM:**') | regex_replace('(TRIAGE:)', '\n\n**TRIAGE:**') | regex_replace('(ACTIONS:)', '\n\n**ACTIONS:**') | regex_replace('(OUTCOME:)', '\n\n**OUTCOME:**') | regex_replace('(RECOMMENDATION:)', '\n\n**RECOMMENDATION:**') }}"
 
     - name: Notify Mattermost with incident report
       community.general.mattermost:
         url: "{{ mattermost_instance }}"
         api_key: "{{ mattermost_token }}"
         attachments:
-          - text: "{{ agent_result_lines }}"
-            color: "{{ '#36a64f' if 'resolved' in agent_result_lines | lower or 'successful' in agent_result_lines | lower else '#cc0000' }}"
+          - text: "{{ agent_report }}"
+            color: "{{ '#36a64f' if 'resolved' in agent_report | lower or 'successful' in agent_report | lower else '#cc0000' }}"
             title: "AI Agent Incident Report"
             fields:
               - title: Problem
