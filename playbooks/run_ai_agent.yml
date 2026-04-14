@@ -50,6 +50,7 @@
                 value: "{{ agent_output.stdout_lines[-15:] | join('\n') }}"
                 short: false
       delegate_to: localhost
+      become: false
       when:
         - mattermost_instance | default('') | trim != ''
         - mattermost_token | default('') | trim != ''
