@@ -39,7 +39,7 @@
         agent_result: >-
           {%- set ns = namespace(capture=false, lines=[]) -%}
           {%- for line in agent_output.stdout_lines -%}
-            {%- if 'RESULT' in line and '===' in line -%}
+            {%- if line | trim == 'RESULT' -%}
               {%- set ns.capture = true -%}
             {%- elif ns.capture and '===' not in line and line | trim | length > 0 -%}
               {%- set _ = ns.lines.append(line) -%}
