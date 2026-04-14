@@ -31,6 +31,7 @@
       register: triage_output
       changed_when: true
       timeout: 300
+      no_log: true
 
     - name: Triage result
       ansible.builtin.debug:
@@ -44,6 +45,7 @@
       register: execute_output
       changed_when: true
       timeout: 300
+      no_log: true
 
     - name: Execution result
       ansible.builtin.debug:
@@ -57,6 +59,7 @@
       register: report_output
       changed_when: true
       timeout: 300
+      no_log: true
 
     - name: Incident report
       ansible.builtin.debug:
