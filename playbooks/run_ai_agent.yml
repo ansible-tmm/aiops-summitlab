@@ -1,0 +1,101 @@
+---
+# Run the CrewAI incident agent on bastion and notify Mattermost.
+# Runs each agent stage separately so AAP shows progress per task.
+# Expected extra_vars:
+#   problem: "Apache web server is down on node1"
+- name: AI Agent - Incident Response
+  hosts: bastion
+  gather_facts: false
+  become: true
+  become_user: "{{ agent_user | default('lab-user') }}"
+
+  vars:
+    problem: "Apache web server is down on node1"
+    agent_user: "lab-user"
+    agent_home: "/home/{{ agent_user }}"
+    agent_script: "{{ agent_home }}/agentic-aiops/incident_agent.py"
+    agent_venv: "{{ agent_home }}/.venv/bin"
+    agent_cmd: >-
+      source {{ agent_home }}/.bashrc &&
+      export CREWAI_TRACING_ENABLED=false &&
+      echo n | {{ agent_venv }}/python3 {{ agent_script }}
+    mattermost_instance: ""
+    mattermost_token: ""
+
+  tasks:
+    - name: "Stage 1: Triage - Analyzing the incident"
+      ansible.builtin.shell: |
+        {{ agent_cmd }} triage "{{ problem }}"
+      args:
+        executable: /bin/bash
+      register: triage_output
+      changed_when: true
+      timeout: 300
+      no_log: true
+
+    - name: Triage result
+      ansible.builtin.debug:
+        msg: "{{ triage_output.stdout_lines | reject('search', '╭|╰|│|Tracing|traces|Would you like') | list | join('\n') }}"
+
+    - name: "Stage 2: Execute - Running remediation"
+      ansible.builtin.shell: |
+        {{ agent_cmd }} execute "{{ problem }}"
+      args:
+        executable: /bin/bash
+      register: execute_output
+      changed_when: true
+      timeout: 300
+      no_log: true
+
+    - name: Execution result
+      ansible.builtin.debug:
+        msg: "{{ execute_output.stdout_lines | reject('search', '╭|╰|│|Tracing|traces|Would you like') | list | join('\n') }}"
+
+    - name: "Stage 3: Report - Generating incident summary"
+      ansible.builtin.shell: |
+        {{ agent_cmd }} report "{{ problem }}"
+      args:
+        executable: /bin/bash
+      register: report_output
+      changed_when: true
+      timeout: 300
+      no_log: true
+
+    - name: Incident report
+      ansible.builtin.debug:
+        msg: "{{ report_output.stdout_lines | reject('search', '╭|╰|│|Tracing|traces|Would you like') | list | join('\n') }}"
+
+    - name: Extract report result lines
+      ansible.builtin.set_fact:
+        agent_result_list: >-
+          {%- set ns = namespace(capture=false, lines=[]) -%}
+          {%- for line in report_output.stdout_lines -%}
+            {%- if line | trim == 'RESULT' -%}
+              {%- set ns.capture = true -%}
+            {%- elif ns.capture and '===' not in line and 'Tracing' not in line and '│' not in line and '╭' not in line and '╰' not in line and 'Would you like' not in line and line | trim | length > 0 -%}
+              {%- set _ = ns.lines.append(line | trim) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.lines }}
+
+    - name: Format report for Mattermost
+      ansible.builtin.set_fact:
+        agent_report: "{{ agent_result_list | regex_replace('(PROBLEM:)', '**PROBLEM:**') | regex_replace('(TRIAGE:)', '\n\n**TRIAGE:**') | regex_replace('(ACTIONS:)', '\n\n**ACTIONS:**') | regex_replace('(OUTCOME:)', '\n\n**OUTCOME:**') | regex_replace('(RECOMMENDATION:)', '\n\n**RECOMMENDATION:**') }}"
+
+    - name: Notify Mattermost with incident report
+      community.general.mattermost:
+        url: "{{ mattermost_instance }}"
+        api_key: "{{ mattermost_token }}"
+        attachments:
+          - text: "{{ agent_report }}"
+            color: "{{ '#36a64f' if 'resolved' in agent_report | lower or 'successful' in agent_report | lower else '#cc0000' }}"
+            title: "AI Agent Incident Report"
+            fields:
+              - title: Problem
+                value: "{{ problem }}"
+                short: true
+      delegate_to: localhost
+      become: false
+      when:
+        - mattermost_instance | default('') | trim != ''
+        - mattermost_token | default('') | trim != ''
