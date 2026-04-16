@@ -31,7 +31,7 @@
    - cisco-rtr2
   gather_facts: false
   vars:
-    bastion_ip: "{{ hostvars['localhost']['bastion_resolved_ip'] }}"
+    _bastion_resolved: "{{ hostvars['localhost']['bastion_resolved_ip'] }}"
     rtr1_ip: "{{ hostvars['localhost']['rtr1_ip'] }}"
     rtr2_ip: "{{ hostvars['localhost']['rtr2_ip'] }}"
 

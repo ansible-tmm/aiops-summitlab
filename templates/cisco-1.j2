@@ -13,7 +13,7 @@ interface Tunnel0
  ip ospf 1 area 0
  tunnel destination {{ rtr2_ip }}
 !
-logging host {{ bastion_ip }} transport tcp port 5514
+logging host {{ _bastion_resolved }} transport tcp port 5514
 !
 service timestamps debug datetime msec
 service timestamps log datetime msec
