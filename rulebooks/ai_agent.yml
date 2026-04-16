@@ -19,8 +19,6 @@
       condition: event.body.message is search("shutting down")
       throttle:
         once_within: 5 minutes
-        group_by_attributes:
-          - event.body.message
       action:
         run_job_template:
           name: "AI Agent: Incident Response"
