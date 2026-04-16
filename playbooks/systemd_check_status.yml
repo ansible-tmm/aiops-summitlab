@@ -19,13 +19,6 @@
       ansible.builtin.debug:
         msg: "{{ service_status }}"
 
-    - name: Fail if service is running properly
-      ansible.builtin.fail:
-        msg: >
-          The {{ linux_service }} service is already running correctly.
-          No troubleshooting is needed. Current status shows service is active.
-      when: not service_status.changed
-
     - name: Check if status of {{ linux_service }}
       ansible.builtin.debug:
         msg: "{{ service_status.status.ActiveState if service_status.status.ActiveState is defined else 'ActiveState not found' }}"
