@@ -18,12 +18,13 @@
       ansible.builtin.shell: getent ahosts bastion | awk '/STREAM/{print $1; exit}'
       register: _bastion_ip
       changed_when: false
+      failed_when: false
 
     - name: Store resolved IPs
       ansible.builtin.set_fact:
         rtr1_ip: "{{ _rtr1_ip.stdout }}"
         rtr2_ip: "{{ _rtr2_ip.stdout }}"
-        bastion_resolved_ip: "{{ _bastion_ip.stdout }}"
+        bastion_resolved_ip: "{{ _bastion_ip.stdout | default('') }}"
 
 - name: Setup two routers for OSPF
   hosts:
@@ -31,7 +32,7 @@
    - cisco-rtr2
   gather_facts: false
   vars:
-    _bastion_resolved: "{{ hostvars['localhost']['bastion_resolved_ip'] }}"
+    _bastion_resolved: "{{ hostvars['localhost']['bastion_resolved_ip'] | default('') }}"
     rtr1_ip: "{{ hostvars['localhost']['rtr1_ip'] }}"
     rtr2_ip: "{{ hostvars['localhost']['rtr2_ip'] }}"
 
