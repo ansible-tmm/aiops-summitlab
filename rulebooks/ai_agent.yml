@@ -19,8 +19,6 @@
       condition: event.body.message is search("shutting down")
       throttle:
         once_within: 5 minutes
-        group_by_attributes:
-          - event.body.host.name
       action:
         run_job_template:
           name: "AI Agent: Incident Response"
@@ -28,27 +26,3 @@
           job_args:
             extra_vars:
               problem: "Apache web server (httpd) has shut down on node1."
-
-- name: AI Agent - Systemd Service Monitor
-  hosts: all
-  sources:
-    - ansible.eda.kafka:
-        host: service1
-        port: 9092
-        topic: systemd-service-logs
-  rules:
-    - name: Crond stopped triggers AI agent
-      condition: event.body.message is search("Stopped", ignorecase=true) or event.body.message is search("deactivating", ignorecase=true)
-      throttle:
-        once_within: 5 minutes
-        group_by_attributes:
-          - event.body.host.name
-      action:
-        run_job_template:
-          name: "AI Agent: Incident Response"
-          organization: "Default"
-          job_args:
-            extra_vars:
-              problem: >-
-                systemd service stopped on node1.
-                Event: {{ event.body.message }}
