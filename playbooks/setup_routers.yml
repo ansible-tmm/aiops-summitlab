@@ -1,4 +1,24 @@
 ---
+- name: Resolve router IPs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Resolve cisco-rtr1 IP via system resolver
+      ansible.builtin.shell: getent hosts {{ hostvars['cisco-rtr1']['ansible_host'] }} | awk '{print $1}'
+      register: _rtr1_ip
+      changed_when: false
+
+    - name: Resolve cisco-rtr2 IP via system resolver
+      ansible.builtin.shell: getent hosts {{ hostvars['cisco-rtr2']['ansible_host'] }} | awk '{print $1}'
+      register: _rtr2_ip
+      changed_when: false
+
+    - name: Store resolved IPs
+      ansible.builtin.set_fact:
+        rtr1_ip: "{{ _rtr1_ip.stdout }}"
+        rtr2_ip: "{{ _rtr2_ip.stdout }}"
+
 - name: Setup two routers for OSPF
   hosts:
    - cisco-rtr1
@@ -8,6 +28,8 @@
     # Set bastion_ip as extra var when running the job template
     # or it will default to 'bastion' hostname
     bastion_ip: "{{ bastion_ip | default('bastion') }}"
+    rtr1_ip: "{{ hostvars['localhost']['rtr1_ip'] }}"
+    rtr2_ip: "{{ hostvars['localhost']['rtr2_ip'] }}"
 
   tasks:
 
