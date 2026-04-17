@@ -1,0 +1,25 @@
+---
+- name: Register with Red Hat Lightspeed
+  hosts: all
+  become: true
+  tasks:
+    - name: Install insights-client
+      ansible.builtin.dnf:
+        name: insights-client
+        state: present
+
+    - name: Register with Lightspeed
+      ansible.builtin.command:
+        cmd: insights-client --register
+      register: register_result
+      changed_when: "'Successfully registered' in register_result.stdout"
+
+    - name: Verify registration status
+      ansible.builtin.command:
+        cmd: insights-client --status
+      register: status_result
+      changed_when: false
+
+    - name: Display registration status
+      ansible.builtin.debug:
+        var: status_result.stdout_lines
