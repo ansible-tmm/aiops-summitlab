@@ -1,0 +1,17 @@
+---
+- name: RHEL System Roles - Logging
+  hosts: all
+  become: true
+  vars:
+    logging_inputs:
+      - name: system_input
+        type: basics
+    logging_outputs:
+      - name: files_output
+        type: files
+    logging_flows:
+      - name: flow0
+        inputs: [system_input]
+        outputs: [files_output]
+  roles:
+    - redhat.rhel_system_roles.logging

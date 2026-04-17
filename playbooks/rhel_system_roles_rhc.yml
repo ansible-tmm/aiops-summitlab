@@ -1,0 +1,8 @@
+---
+- name: RHEL System Roles - RHC Registration
+  hosts: all
+  become: true
+  vars:
+    rhc_state: present
+  roles:
+    - redhat.rhel_system_roles.rhc

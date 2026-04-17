@@ -1,0 +1,9 @@
+---
+- name: RHEL System Roles - SSHD
+  hosts: all
+  become: true
+  vars:
+    sshd_PermitRootLogin: "no"
+    sshd_MaxAuthTries: 3
+  roles:
+    - redhat.rhel_system_roles.sshd

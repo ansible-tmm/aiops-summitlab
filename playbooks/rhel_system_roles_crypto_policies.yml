@@ -1,0 +1,8 @@
+---
+- name: RHEL System Roles - Crypto Policies
+  hosts: all
+  become: true
+  vars:
+    crypto_policies_policy: DEFAULT
+  roles:
+    - redhat.rhel_system_roles.crypto_policies

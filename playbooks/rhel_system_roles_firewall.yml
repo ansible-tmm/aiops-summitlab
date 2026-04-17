@@ -1,0 +1,13 @@
+---
+- name: RHEL System Roles - Firewall
+  hosts: all
+  become: true
+  vars:
+    firewall:
+      - previous: replaced
+      - service: ssh
+        state: enabled
+      - service: http
+        state: enabled
+  roles:
+    - redhat.rhel_system_roles.firewall

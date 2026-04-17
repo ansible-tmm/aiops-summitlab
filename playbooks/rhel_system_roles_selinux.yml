@@ -1,0 +1,12 @@
+---
+- name: RHEL System Roles - SELinux
+  hosts: all
+  become: true
+  vars:
+    selinux_state: enforcing
+    selinux_booleans:
+      - name: httpd_can_network_connect
+        state: true
+        persistent: true
+  roles:
+    - redhat.rhel_system_roles.selinux

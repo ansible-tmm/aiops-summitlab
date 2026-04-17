@@ -1,0 +1,15 @@
+---
+- name: RHEL System Roles - Timesync
+  hosts: all
+  become: true
+  vars:
+    timesync_ntp_provider: chrony
+    timesync_ntp_servers:
+      - hostname: 0.pool.ntp.org
+        pool: true
+        iburst: true
+      - hostname: 1.pool.ntp.org
+        pool: true
+        iburst: true
+  roles:
+    - redhat.rhel_system_roles.timesync
