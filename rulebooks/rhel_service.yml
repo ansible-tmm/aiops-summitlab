@@ -27,5 +27,4 @@
             organization: "Default"
             job_args:
               extra_vars:
-                alert_host: "node1"
-                alert_search_name: "{{ event.payload.search_name }}"
+                webhook_payload: "{{ event.payload }}"
