@@ -22,28 +22,20 @@
       ansible.builtin.debug:
         msg: "{{ rhsm_identity.stdout_lines | default(['Not registered']) }}"
 
-    - name: Unregister insights-client from old account
+    - name: Disconnect from current RHC registration
       ansible.builtin.command:
-        cmd: insights-client --unregister
+        cmd: rhc disconnect
       failed_when: false
       changed_when: true
 
-    - name: Unregister from current RHSM account
-      community.general.redhat_subscription:
-        state: absent
-
-    - name: Clean subscription-manager state
+    - name: Connect to correct Red Hat account via RHC
       ansible.builtin.command:
-        cmd: subscription-manager clean
-      changed_when: true
+        cmd: "rhc connect --username {{ scm_username }} --password {{ scm_password }}"
+      register: rhc_result
 
-    - name: Register with correct Red Hat account
-      community.general.redhat_subscription:
-        state: present
-        username: "{{ scm_username }}"
-        password: "{{ scm_password }}"
-        auto_attach: true
-        force_register: true
+    - name: Display RHC connection result
+      ansible.builtin.debug:
+        msg: "{{ rhc_result.stdout_lines }}"
 
     - name: Verify RHSM registration
       ansible.builtin.command:
@@ -55,11 +47,6 @@
       ansible.builtin.debug:
         msg: "{{ rhsm_verify.stdout_lines }}"
 
-    - name: Install insights-client
-      ansible.builtin.dnf:
-        name: insights-client
-        state: present
-
     - name: Write custom tags for lab grouping
       ansible.builtin.copy:
         dest: /etc/insights-client/tags.yaml
@@ -69,20 +56,14 @@
           lab_id: {{ sandbox_id }}
           environment: summit-lab
 
-    - name: Register with Lightspeed and assign group
+    - name: Apply group tag and upload to Insights
       ansible.builtin.command:
-        cmd: "insights-client --register --group={{ sandbox_id }}"
-      register: register_result
-      changed_when: "'Successfully registered' in register_result.stdout"
+        cmd: "insights-client --group={{ sandbox_id }}"
+      register: insights_result
 
-    - name: Verify registration status
-      ansible.builtin.command:
-        cmd: insights-client --status
-      register: status_result
-      changed_when: false
-
-    - name: Display registration status
+    - name: Display Insights registration
       ansible.builtin.debug:
         msg:
-          - "Registration: {{ status_result.stdout_lines }}"
+          - "{{ insights_result.stdout_lines }}"
           - "Group/Tag: {{ sandbox_id }}"
+          - "Account: {{ scm_username }} (org 12451665)"
