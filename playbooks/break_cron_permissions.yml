@@ -1,0 +1,18 @@
+---
+- name: Break cron with insecure file permissions
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Create crontab file with insecure permissions
+      ansible.builtin.copy:
+        content: "* * * * * root /usr/bin/logger 'cron heartbeat'\n"
+        dest: /etc/cron.d/insecure-job
+        owner: root
+        group: root
+        mode: "0777"
+
+    - name: Display status
+      ansible.builtin.debug:
+        msg: "Insecure cron file (mode 0777) written to /etc/cron.d/insecure-job on {{ inventory_hostname }}. crond will refuse to run it."

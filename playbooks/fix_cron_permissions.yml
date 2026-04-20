@@ -1,0 +1,26 @@
+---
+- name: Fix cron file permissions
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Fix permissions on insecure cron file
+      ansible.builtin.file:
+        path: /etc/cron.d/insecure-job
+        mode: "0644"
+
+    - name: Restart crond
+      ansible.builtin.systemd:
+        name: crond
+        state: restarted
+        enabled: true
+
+    - name: Verify crond is running
+      ansible.builtin.systemd:
+        name: crond
+      register: crond_status
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: "crond is {{ crond_status.status.ActiveState }}, /etc/cron.d/insecure-job permissions fixed on {{ inventory_hostname }}"

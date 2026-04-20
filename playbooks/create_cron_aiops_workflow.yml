@@ -1,0 +1,48 @@
+---
+# Creates the Cron-AIOps-Workflow in AAP.
+# Node 1: AI Router analyzes syslog alert and selects the correct fix
+# Node 2: Approval gate for human review
+# Node 3: Dispatcher launches the AI-selected fix JT
+- name: Create Cron AIOps Workflow
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Create Cron AIOps Workflow Template
+      ansible.controller.workflow_job_template:
+        name: "Cron-AIOps-Workflow"
+        description: "AI-driven cron remediation: route alert to correct fix via LLM"
+        organization: "Default"
+        inventory: "lab-inventory"
+        state: present
+        workflow_nodes:
+          - identifier: ai_router
+            unified_job_template:
+              name: "AI Route Cron Remediation"
+              organization:
+                name: Default
+              type: job_template
+            related:
+              success_nodes:
+                - identifier: approval_gate
+          - identifier: approval_gate
+            approval_node:
+              name: "Review AI Routing Decision"
+              description: "Review the AI-selected cron fix before applying"
+              timeout: 900
+            related:
+              success_nodes:
+                - identifier: dispatch_fix
+          - identifier: dispatch_fix
+            unified_job_template:
+              name: "Dispatch Cron Remediation"
+              organization:
+                name: Default
+              type: job_template
+
+    - name: Display workflow creation status
+      ansible.builtin.debug:
+        msg: >-
+          Cron-AIOps-Workflow created with 3 nodes:
+          AI Router -> Approval Gate -> Dispatch Remediation

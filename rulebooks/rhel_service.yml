@@ -1,31 +1,31 @@
 ---
-# EDA Rulebook: RHEL Service Down
-# Listens for Splunk webhook alerts about RHEL service failures.
-# Triggers the RHEL-Self-Healing workflow.
-- name: "Listen for RHEL service alerts from Splunk"
+# EDA Rulebook: RHEL Cron Service
+# Listens for Splunk webhook alerts about cron failures.
+# Triggers the Cron-AIOps-Workflow (AI router -> approval -> dispatch).
+- name: "Listen for RHEL cron alerts from Splunk"
   hosts: all
 
   sources:
-    - name: "Webhook listener for RHEL service events"
+    - name: "Webhook listener for RHEL cron events"
       ansible.eda.webhook:
         host: 0.0.0.0
         port: 5000
 
   rules:
-    - name: "Process RHEL service failure from Splunk"
-      condition: event.payload.search_name == 'rhel-service-down'
+    - name: "Route cron failure through AI workflow"
+      condition: event.payload.search_name == 'rhel-cron-failure'
       actions:
         - debug:
             msg: |
-              RHEL Service Alert Received!
+              Cron Alert Received from Splunk!
               Search Name: {{ event.payload.search_name }}
               Result: {{ event.payload.result | default('N/A') }}
-              Triggering RHEL self-healing workflow...
+              Routing through AI workflow...
 
         - run_workflow_template:
-            name: "RHEL-Self-Healing"
+            name: "Cron-AIOps-Workflow"
             organization: "Default"
             job_args:
               extra_vars:
-                webhook_payload: "{{ event.payload }}"
-                input_linux_service: "crond"
+                alert_text: "{{ event.payload.result | default(event.payload.search_name) }}"
+                alert_search_name: "{{ event.payload.search_name }}"

@@ -1,0 +1,153 @@
+---
+# Workflow Node 1: AI-assisted cron alert routing
+# Receives Splunk alert context, fetches job template catalog from AAP,
+# calls LLM to select the best remediation template, and passes the decision
+# to the next workflow node via set_stats.
+- name: AI-assisted cron alert routing
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    alert_text: ""
+    alert_search_name: ""
+
+    llm_api_url: ""
+    llm_api_key: ""
+    llm_model: "claude-sonnet-4-6"
+
+    controller_host: "{{ lookup('env', 'CONTROLLER_HOST') }}"
+    controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+    controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+
+    mattermost_instance: ""
+    mattermost_token: ""
+
+  tasks:
+    - name: Validate alert input
+      ansible.builtin.assert:
+        that:
+          - alert_text | length > 0
+        fail_msg: "No alert_text provided."
+
+    - name: Fetch job template catalog from AAP
+      ansible.builtin.uri:
+        url: "https://{{ controller_host }}/api/controller/v2/job_templates/?page_size=100&search=cron"
+        method: GET
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        status_code: 200
+      register: jt_response
+
+    - name: Build template catalog for LLM
+      ansible.builtin.set_fact:
+        template_catalog: >-
+          {% for jt in jt_response.json.results %}
+          {{ loop.index }}. {{ jt.name }}
+             Description: {{ jt.description | default('No description') }}
+          {% endfor %}
+
+    - name: Build LLM prompt
+      ansible.builtin.set_fact:
+        llm_prompt: |
+          You are an AIOps incident analyst for RHEL infrastructure. A Splunk alert
+          has fired about a crond (cron daemon) issue on a RHEL server. Your job is to:
+          1. Analyze the syslog message and explain what went wrong
+          2. Identify the root cause category
+          3. Select the correct remediation from the available job templates
+
+          SYSLOG ALERT:
+          {{ alert_text }}
+
+          AVAILABLE REMEDIATION JOB TEMPLATES:
+          {{ template_catalog }}
+
+          INSTRUCTIONS:
+          - Analyze the syslog message and write a clear, non-technical explanation of what happened
+          - Identify the root cause: syntax error in a crontab file, insecure file permissions, or the service was stopped/crashed
+          - Select exactly ONE job template that fixes this specific root cause
+          - If confidence is below 70% or the alert does not clearly match any template, set template to "ESCALATE"
+          - Respond with ONLY a JSON object in this exact format:
+          {"template": "<exact template name>", "confidence": <0-100>, "analysis": "<2-3 sentences explaining what the syslog message means and what went wrong>", "root_cause": "<syntax_error|bad_permissions|service_stopped|unknown>", "recommendation": "<one sentence describing what the fix will do>"}
+
+    - name: Call LLM for routing decision
+      ansible.builtin.uri:
+        url: "{{ llm_api_url }}"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ llm_api_key }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          model: "{{ llm_model }}"
+          messages:
+            - role: user
+              content: "{{ llm_prompt }}"
+          temperature: 0.1
+          max_tokens: 1000
+        status_code: 200
+      register: llm_response
+
+    - name: Parse LLM response
+      ansible.builtin.set_fact:
+        routing_decision: "{{ llm_response.json.choices[0].message.content | regex_replace('(?s)```(?:json)?\\s*', '') | regex_replace('(?s)```\\s*$', '') | trim }}"
+
+    - name: Display AI analysis
+      ansible.builtin.debug:
+        msg:
+          - "Analysis: {{ routing_decision.analysis }}"
+          - "Root Cause: {{ routing_decision.root_cause }}"
+          - "Selected Fix: {{ routing_decision.template }}"
+          - "Confidence: {{ routing_decision.confidence }}%"
+          - "Recommendation: {{ routing_decision.recommendation }}"
+
+    - name: Post AI analysis to Mattermost
+      community.general.mattermost:
+        url: "{{ mattermost_instance }}"
+        api_key: "{{ mattermost_token }}"
+        attachments:
+          - text: "AIOps Incident Analysis - Cron Service Failure"
+            color: "{{ '#ff6600' if routing_decision.confidence | int < 80 else '#0066cc' }}"
+            title: "AI Incident Report: crond failure detected by Splunk"
+            fields:
+              - title: What Happened
+                value: "{{ routing_decision.analysis }}"
+                short: false
+              - title: Root Cause
+                value: "{{ routing_decision.root_cause }}"
+                short: true
+              - title: Confidence
+                value: "{{ routing_decision.confidence }}%"
+                short: true
+              - title: Recommended Fix
+                value: "{{ routing_decision.recommendation }}"
+                short: false
+              - title: Job Template
+                value: "{{ routing_decision.template }}"
+                short: true
+              - title: Action Required
+                value: "Approve this remediation in AAP to apply the fix"
+                short: true
+              - title: Syslog Event
+                value: "{{ alert_text }}"
+                short: false
+      delegate_to: localhost
+      when: mattermost_instance | default('') | trim != ''
+
+    - name: Pass routing decision to workflow
+      ansible.builtin.set_stats:
+        data:
+          selected_template: "{{ routing_decision.template }}"
+          routing_confidence: "{{ routing_decision.confidence }}"
+          routing_reasoning: "{{ routing_decision.recommendation }}"
+          alert_text: "{{ alert_text }}"
+
+    - name: Fail if AI says ESCALATE
+      ansible.builtin.fail:
+        msg: >-
+          AI could not confidently identify a fix (confidence: {{ routing_decision.confidence }}%).
+          Analysis: {{ routing_decision.analysis }}
+          Escalating to on-call team for manual investigation.
+      when: routing_decision.template == "ESCALATE"

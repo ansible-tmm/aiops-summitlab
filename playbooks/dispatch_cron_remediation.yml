@@ -1,0 +1,74 @@
+---
+# Workflow Node 3: Execute the AI-selected cron remediation template
+# Reads the routing decision from workflow artifacts (set_stats from Node 1)
+# and launches the corresponding job template via AAP API.
+- name: Dispatch AI-selected cron remediation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    selected_template: ""
+    routing_confidence: ""
+    routing_reasoning: ""
+    alert_text: ""
+
+    controller_host: "{{ lookup('env', 'CONTROLLER_HOST') }}"
+    controller_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+    controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+
+  tasks:
+    - name: Validate routing decision
+      ansible.builtin.assert:
+        that:
+          - selected_template | length > 0
+          - selected_template != "ESCALATE"
+        fail_msg: "No valid template selected."
+
+    - name: Display approved remediation
+      ansible.builtin.debug:
+        msg:
+          - "Approved: {{ selected_template }}"
+          - "Confidence: {{ routing_confidence }}%"
+          - "Reasoning: {{ routing_reasoning }}"
+
+    - name: Find job template in AAP
+      ansible.builtin.uri:
+        url: "https://{{ controller_host }}/api/controller/v2/job_templates/?name={{ selected_template | urlencode }}"
+        method: GET
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        status_code: 200
+      register: template_lookup
+
+    - name: Fail if template not found
+      ansible.builtin.assert:
+        that:
+          - template_lookup.json.count > 0
+        fail_msg: "Template '{{ selected_template }}' not found in AAP."
+
+    - name: Launch remediation job template
+      ansible.builtin.uri:
+        url: "https://{{ controller_host }}/api/controller/v2/job_templates/{{ template_lookup.json.results[0].id }}/launch/"
+        method: POST
+        url_username: "{{ controller_username }}"
+        url_password: "{{ controller_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          extra_vars:
+            routed_by: "ai"
+            routing_confidence: "{{ routing_confidence }}"
+        validate_certs: false
+        status_code: [200, 201]
+      register: launched_job
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg:
+          - "Remediation launched"
+          - "Job ID: {{ launched_job.json.id }}"
+          - "Template: {{ selected_template }}"
+          - "Alert: {{ alert_text }}"

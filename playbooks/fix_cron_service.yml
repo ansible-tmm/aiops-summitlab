@@ -1,0 +1,21 @@
+---
+- name: Restart stopped crond service
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Start and enable crond
+      ansible.builtin.systemd:
+        name: crond
+        state: started
+        enabled: true
+
+    - name: Verify crond is running
+      ansible.builtin.systemd:
+        name: crond
+      register: crond_status
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: "crond is {{ crond_status.status.ActiveState }} on {{ inventory_hostname }}"

@@ -1,0 +1,26 @@
+---
+- name: Fix cron syntax error
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Remove invalid crontab file
+      ansible.builtin.file:
+        path: /etc/cron.d/broken-job
+        state: absent
+
+    - name: Restart crond
+      ansible.builtin.systemd:
+        name: crond
+        state: restarted
+        enabled: true
+
+    - name: Verify crond is running
+      ansible.builtin.systemd:
+        name: crond
+      register: crond_status
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: "crond is {{ crond_status.status.ActiveState }} on {{ inventory_hostname }}"
