@@ -81,11 +81,11 @@
 
           INSTRUCTIONS:
           - Analyze the syslog message and write a clear, non-technical explanation of what happened
-          - Identify the root cause: syntax error in a crontab file, insecure file permissions, or the service was stopped/crashed
+          - Identify the root cause: syntax error in a crontab file (bad minute/hour/day), or invalid user referenced in a crontab entry (getpwnam failed)
           - Select exactly ONE job template that fixes this specific root cause
           - If confidence is below 70% or the alert does not clearly match any template, set template to "ESCALATE"
           - Respond with ONLY a JSON object in this exact format:
-          {"template": "<exact template name>", "confidence": <0-100>, "analysis": "<2-3 sentences explaining what the syslog message means and what went wrong>", "root_cause": "<syntax_error|bad_permissions|service_stopped|unknown>", "recommendation": "<one sentence describing what the fix will do>"}
+          {"template": "<exact template name>", "confidence": <0-100>, "analysis": "<2-3 sentences explaining what the syslog message means and what went wrong>", "root_cause": "<syntax_error|invalid_user|unknown>", "recommendation": "<one sentence describing what the fix will do>"}
 
     - name: Call LLM for routing decision
       ansible.builtin.uri:
