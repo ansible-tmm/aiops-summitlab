@@ -9,37 +9,70 @@
   gather_facts: false
 
   tasks:
+    - name: Delete existing workflow if present
+      ansible.controller.workflow_job_template:
+        name: "Cron-AIOps-Workflow"
+        organization: "Default"
+        state: absent
+
     - name: Create Cron AIOps Workflow Template
       ansible.controller.workflow_job_template:
         name: "Cron-AIOps-Workflow"
         description: "AI-driven cron remediation: route alert to correct fix via LLM"
         organization: "Default"
         inventory: "lab-inventory"
+        ask_variables_on_launch: true
         state: present
-        workflow_nodes:
-          - identifier: ai_router
-            unified_job_template:
-              name: "AI Route Cron Remediation"
-              organization:
-                name: Default
-              type: job_template
-            related:
-              success_nodes:
-                - identifier: approval_gate
-          - identifier: approval_gate
-            approval_node:
-              name: "Review AI Routing Decision"
-              description: "Review the AI-selected cron fix before applying"
-              timeout: 900
-            related:
-              success_nodes:
-                - identifier: dispatch_fix
-          - identifier: dispatch_fix
-            unified_job_template:
-              name: "Dispatch Cron Remediation"
-              organization:
-                name: Default
-              type: job_template
+
+    - name: Add AI Router node
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "Cron-AIOps-Workflow"
+        organization: "Default"
+        identifier: "ai_router"
+        unified_job_template: "AI Route Cron Remediation"
+        state: present
+
+    - name: Add Approval node
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "Cron-AIOps-Workflow"
+        organization: "Default"
+        identifier: "approval_gate"
+        approval_node:
+          name: "Review AI Routing Decision"
+          description: "Review the AI-selected cron fix before applying"
+          timeout: 900
+        state: present
+
+    - name: Add Dispatch node
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "Cron-AIOps-Workflow"
+        organization: "Default"
+        identifier: "dispatch_fix"
+        unified_job_template: "Dispatch Cron Remediation"
+        state: present
+
+    - name: Link AI Router to Approval on success
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "Cron-AIOps-Workflow"
+        organization: "Default"
+        identifier: "ai_router"
+        unified_job_template: "AI Route Cron Remediation"
+        success_nodes:
+          - "approval_gate"
+        state: present
+
+    - name: Link Approval to Dispatch on success
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "Cron-AIOps-Workflow"
+        organization: "Default"
+        identifier: "approval_gate"
+        approval_node:
+          name: "Review AI Routing Decision"
+          description: "Review the AI-selected cron fix before applying"
+          timeout: 900
+        success_nodes:
+          - "dispatch_fix"
+        state: present
 
     - name: Display workflow creation status
       ansible.builtin.debug:
