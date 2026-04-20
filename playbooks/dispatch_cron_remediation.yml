@@ -62,6 +62,7 @@
         force_basic_auth: true
         body_format: json
         body:
+          limit: "{{ alert_host | default('node1') }}"
           extra_vars:
             routed_by: "ai"
             routing_confidence: "{{ routing_confidence }}"

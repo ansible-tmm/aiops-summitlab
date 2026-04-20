@@ -158,6 +158,7 @@
           routing_confidence: "{{ routing_decision.confidence }}"
           routing_reasoning: "{{ routing_decision.recommendation }}"
           alert_text: "{{ alert_text }}"
+          alert_host: "{{ alert_host }}"
 
     - name: Fail if AI says ESCALATE
       ansible.builtin.fail:
