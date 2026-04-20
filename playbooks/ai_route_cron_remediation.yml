@@ -9,7 +9,10 @@
   gather_facts: false
 
   vars:
-    alert_text: ""
+    alert_host: ""
+    alert_process: ""
+    alert_pid: ""
+    alert_source: ""
     alert_search_name: ""
 
     llm_api_url: ""
@@ -27,8 +30,19 @@
     - name: Validate alert input
       ansible.builtin.assert:
         that:
-          - alert_text | length > 0
-        fail_msg: "No alert_text provided."
+          - alert_host | length > 0
+        fail_msg: "No alert_host provided."
+
+    - name: Check crond status on the affected host
+      ansible.builtin.command:
+        cmd: "ssh -o StrictHostKeyChecking=no {{ alert_host }} 'sudo systemctl status crond 2>&1; sudo journalctl -u crond -n 20 --no-pager 2>&1; ls -la /etc/cron.d/ 2>&1; for f in /etc/cron.d/*; do echo \"=== $f ===\"; cat \"$f\" 2>&1; done'"
+      register: crond_diagnostics
+      changed_when: false
+      failed_when: false
+
+    - name: Set alert_text from diagnostics
+      ansible.builtin.set_fact:
+        alert_text: "{{ crond_diagnostics.stdout }}"
 
     - name: Fetch job template catalog from AAP
       ansible.builtin.uri:
