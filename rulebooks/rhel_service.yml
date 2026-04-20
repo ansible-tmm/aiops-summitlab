@@ -27,5 +27,5 @@
             organization: "Default"
             job_args:
               extra_vars:
-                alert_payload: "{{ event.payload | to_json }}"
+                splunk_result: "{{ event.payload.result }}"
                 alert_search_name: "{{ event.payload.search_name }}"
