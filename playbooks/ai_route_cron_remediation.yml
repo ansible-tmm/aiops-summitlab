@@ -9,7 +9,7 @@
   gather_facts: false
 
   vars:
-    alert_text: ""
+    splunk_result: {}
     alert_search_name: ""
 
     llm_api_url: ""
@@ -24,11 +24,16 @@
     mattermost_token: ""
 
   tasks:
-    - name: Validate alert input
+    - name: Validate Splunk result
       ansible.builtin.assert:
         that:
-          - alert_text | length > 0
-        fail_msg: "No alert_text provided."
+          - splunk_result | length > 0
+        fail_msg: "No splunk_result provided."
+
+    - name: Extract syslog message from Splunk result
+      ansible.builtin.set_fact:
+        alert_text: "{{ splunk_result._raw | default(alert_search_name) }}"
+        alert_host: "{{ splunk_result.host | default('unknown') }}"
 
     - name: Fetch job template catalog from AAP
       ansible.builtin.uri:
