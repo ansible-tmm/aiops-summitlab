@@ -93,9 +93,10 @@
         url_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
         url_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
         force_basic_auth: true
-        body_format: json
-        body:
-          id: "{{ dispatch_node_id | int }}"
+        body_format: raw
+        body: '{"id": {{ dispatch_node_id }}}'
+        headers:
+          Content-Type: "application/json"
         validate_certs: false
         status_code: [200, 201, 204]
 
