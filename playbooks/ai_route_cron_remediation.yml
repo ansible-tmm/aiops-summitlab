@@ -41,20 +41,13 @@
           - "Host: {{ alert_host }}"
           - "Syslog: {{ alert_text }}"
 
-    - name: Check crond status on the affected host
-      ansible.builtin.command:
-        cmd: "ssh -o StrictHostKeyChecking=no {{ alert_host }} 'sudo systemctl status crond 2>&1; sudo journalctl -u crond -n 20 --no-pager 2>&1; ls -la /etc/cron.d/ 2>&1; for f in /etc/cron.d/*; do echo \"=== $f ===\"; cat \"$f\" 2>&1; done'"
-      register: crond_diagnostics
-      changed_when: false
-      failed_when: false
-
-    - name: Build full alert context
+    - name: Set controller URL
       ansible.builtin.set_fact:
-        alert_text: "Splunk syslog event: {{ alert_text }}\n\nDiagnostics from {{ alert_host }}:\n{{ crond_diagnostics.stdout }}"
+        controller_url: "{{ controller_host if controller_host.startswith('https://') else 'https://' + controller_host }}"
 
     - name: Fetch job template catalog from AAP
       ansible.builtin.uri:
-        url: "https://{{ controller_host }}/api/controller/v2/job_templates/?page_size=100&search=cron"
+        url: "{{ controller_url }}/api/controller/v2/job_templates/?page_size=100&search=cron"
         method: GET
         url_username: "{{ controller_username }}"
         url_password: "{{ controller_password }}"
