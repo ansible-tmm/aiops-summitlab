@@ -28,6 +28,21 @@
       failed_when: false
       changed_when: true
 
+    - name: Point subscription-manager back to Red Hat CDN
+      ansible.builtin.command:
+        cmd: >-
+          subscription-manager config
+          --server.hostname=subscription.rhsm.redhat.com
+          --server.prefix=/subscription
+          --server.port=443
+          --rhsm.baseurl=https://cdn.redhat.com
+      changed_when: true
+
+    - name: Clean stale RHSM data
+      ansible.builtin.command:
+        cmd: subscription-manager clean
+      changed_when: true
+
     - name: Connect to correct Red Hat account via RHC
       ansible.builtin.command:
         cmd: "rhc connect --username {{ scm_username }} --password {{ scm_password }}"
