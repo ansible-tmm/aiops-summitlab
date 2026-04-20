@@ -27,5 +27,8 @@
             organization: "Default"
             job_args:
               extra_vars:
-                splunk_result: "{{ event.payload.result }}"
+                alert_host: "{{ event.payload.result.host }}"
+                alert_process: "{{ event.payload.result.process }}"
+                alert_pid: "{{ event.payload.result.pid }}"
+                alert_source: "{{ event.payload.result.source }}"
                 alert_search_name: "{{ event.payload.search_name }}"
