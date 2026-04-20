@@ -3,14 +3,62 @@
   hosts: all
   become: true
   tasks:
+    - name: Extract sandbox ID from hostname
+      ansible.builtin.set_fact:
+        sandbox_id: "{{ ansible_fqdn | regex_search('sandbox-([a-z0-9]+)-', '\\1') | default(['unknown'], true) | first }}"
+
+    - name: Display sandbox ID
+      ansible.builtin.debug:
+        msg: "Sandbox ID for this lab: {{ sandbox_id }}"
+
+    - name: Check current RHSM identity
+      ansible.builtin.command:
+        cmd: subscription-manager identity
+      register: rhsm_identity
+      changed_when: false
+      failed_when: false
+
+    - name: Unregister from wrong account if needed
+      community.general.redhat_subscription:
+        state: absent
+      when: rhsm_identity.rc == 0 and (rhsm_username is defined and rhsm_username | length > 0)
+
+    - name: Register with Red Hat Subscription Manager
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ rhsm_username }}"
+        password: "{{ rhsm_password }}"
+        auto_attach: true
+        force_register: true
+      when: rhsm_username is defined and rhsm_username | length > 0
+
+    - name: Verify RHSM registration
+      ansible.builtin.command:
+        cmd: subscription-manager identity
+      register: rhsm_verify
+      changed_when: false
+
+    - name: Display RHSM account info
+      ansible.builtin.debug:
+        msg: "{{ rhsm_verify.stdout_lines }}"
+
     - name: Install insights-client
       ansible.builtin.dnf:
         name: insights-client
         state: present
 
-    - name: Register with Lightspeed
+    - name: Write custom tags for lab grouping
+      ansible.builtin.copy:
+        dest: /etc/insights-client/tags.yaml
+        mode: "0644"
+        content: |
+          group: {{ sandbox_id }}
+          lab_id: {{ sandbox_id }}
+          environment: summit-lab
+
+    - name: Register with Lightspeed and assign group
       ansible.builtin.command:
-        cmd: insights-client --register
+        cmd: "insights-client --register --group={{ sandbox_id }}"
       register: register_result
       changed_when: "'Successfully registered' in register_result.stdout"
 
@@ -22,4 +70,6 @@
 
     - name: Display registration status
       ansible.builtin.debug:
-        var: status_result.stdout_lines
+        msg:
+          - "Registration: {{ status_result.stdout_lines }}"
+          - "Group/Tag: {{ sandbox_id }}"
