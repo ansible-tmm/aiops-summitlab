@@ -95,7 +95,7 @@
         force_basic_auth: true
         body_format: json
         body:
-          id: "{{ dispatch_node_id }}"
+          id: "{{ dispatch_node_id | int }}"
         validate_certs: false
         status_code: [200, 201, 204]
 
