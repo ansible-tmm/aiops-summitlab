@@ -1,0 +1,372 @@
+# Phase 1: AI Insights as a Native AAP Feature
+
+## Core Concept: "AI-Assisted Job Analysis"
+
+### Simple UX:
+
+```
+Job Template Settings
+├── General
+├── Details
+├── Execution Environment
+└── [NEW] ✅ Enable AI Insights
+    ├── AI Endpoint URL: [https://customer-ai.example.com/v1/chat/completions]
+    ├── API Token: [•••••••]
+    ├── Model: [granite-3.1-8b-instruct] (optional)
+    └── Integration:
+        ○ AAP Only (show insights in job output)
+        ○ ServiceNow (create/update incidents with AI insights)
+        ○ Email (include in failure notifications)
+```
+
+## How It Works (User Perspective)
+
+### Before AI Insights:
+
+```
+Job #457 - FAILED
+TASK [Install PostgreSQL] *********************
+fatal: [server01]: FAILED! => {"changed": false,
+"msg": "Failed to download metadata for repo
+'rhel-9-for-x86_64-baseos-rpms'"}
+
+PLAY RECAP ************************************
+server01: ok=3 changed=0 unreachable=0 failed=1
+```
+
+### After Enabling AI Insights:
+
+```
+Job #457 - FAILED
+
+🤖 AI INSIGHTS:
+
+ROOT CAUSE:
+The repository metadata download failed because the system
+is not properly registered with Red Hat Subscription Manager
+or the repository is not enabled.
+
+AFFECTED COMPONENT:
+- Managed Node: server01 (RHEL 9.3)
+- Task: Install PostgreSQL
+- Collection: ansible.builtin.dnf
+
+RECOMMENDED REMEDIATION:
+1. Verify subscription: subscription-manager status
+2. Enable required repository:
+   subscription-manager repos --enable=rhel-9-for-x86_64-baseos-rpms
+3. Re-run this job template
+
+📋 AUTO-GENERATED REMEDIATION PLAYBOOK:
+[View Job Template] "Fix: server01 - Subscription Issue"
+---
+TASK [Install PostgreSQL] *********************
+fatal: [server01]: FAILED! => {"changed": false,
+"msg": "Failed to download metadata for repo..."}
+```
+
+## Feature Design: Minimal, Extensible
+
+### 1. AI Insights Checkbox (Job Template Level)
+
+When enabled, AAP automatically:
+- Captures job failure context (stdout, stderr, task details, inventory host vars)
+- Sends structured prompt to configured AI endpoint
+- Parses AI response
+- Displays insights in job output
+- Optionally creates remediation job template
+
+### 2. Structured Prompt to AI (Auto-Generated)
+
+AAP constructs a prompt like:
+
+```json
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an expert Ansible automation troubleshooter. Analyze failures and provide: 1) Root cause in plain English, 2) Affected component details, 3) Step-by-step remediation"
+    },
+    {
+      "role": "user",
+      "content": "Job Template: Install PostgreSQL\nPlaybook: install_pgsql.yml\nTask: Install PostgreSQL\nHost: server01 (RHEL 9.3)\nError: Failed to download metadata for repo 'rhel-9-for-x86_64-baseos-rpms'\nFull Output: [task output here]\nHost Variables: ansible_distribution=RedHat, ansible_distribution_version=9.3"
+    }
+  ]
+}
+```
+
+### 3. AI Response Parsing
+
+AI returns structured or semi-structured insights:
+
+```json
+{
+  "root_cause": "Repository not enabled or subscription issue",
+  "affected_component": "server01 RHEL subscription",
+  "remediation_steps": [
+    "Check subscription status",
+    "Enable repository",
+    "Re-run playbook"
+  ],
+  "remediation_playbook": "---\n- name: Fix subscription\n  hosts: server01\n  tasks:\n    - name: Enable repo\n      command: subscription-manager repos --enable=rhel-9-for-x86_64-baseos-rpms"
+}
+```
+
+AAP displays this in the job output UI (similar to how you show stdout now).
+
+## Phase 1 Integration Points
+
+### A. AAP UI Integration (Minimal UX Changes)
+
+**Job Output Page:**
+
+```
+┌─────────────────────────────────────────────┐
+│ Job #457 - Install PostgreSQL - FAILED      │
+├─────────────────────────────────────────────┤
+│ 🤖 AI INSIGHTS                               │
+│                                              │
+│ ROOT CAUSE:                                  │
+│ Repository metadata download failed...       │
+│                                              │
+│ [View Full Analysis] [Generate Fix Template]│
+└─────────────────────────────────────────────┘
+│                                              │
+│ PLAY [Install PostgreSQL] ******************│
+│ TASK [Gathering Facts] *********************│
+│ ok: [server01]                              │
+```
+
+**Job List Page:**
+
+```
+Job #457 | FAILED | 🤖 AI Analyzed | [View Insights]
+```
+
+### B. ServiceNow Integration (Optional)
+
+When job fails + AI Insights enabled + ServiceNow configured: Auto-created ServiceNow Incident:
+
+```
+Incident: INC0012345
+Summary: Ansible Job #457 Failed - Install PostgreSQL
+Description:
+Job Template: Install PostgreSQL
+Target: server01
+Status: FAILED
+
+🤖 AI ROOT CAUSE ANALYSIS:
+The repository metadata download failed because...
+
+RECOMMENDED REMEDIATION:
+1. Verify subscription: subscription-manager status
+2. Enable required repository...
+
+AUTOMATION OPTIONS:
+- Auto-generated remediation available in AAP
+- Job Template: "Fix: server01 - Subscription Issue"
+- Link: https://aap.example.com/jobs/458
+```
+
+### C. Email Integration (Existing AAP Email Notifications)
+
+Enhanced Failure Email:
+
+```
+Subject: ❌ Job Failed: Install PostgreSQL (#457)
+
+Job #457 has failed on server01
+
+🤖 AI INSIGHTS:
+ROOT CAUSE: Repository not enabled or subscription issue
+REMEDIATION: Check subscription and enable repo
+
+View full analysis: https://aap.example.com/jobs/457
+Auto-generated fix: https://aap.example.com/templates/fix-457
+```
+
+## Backend Architecture (Minimal Engineering)
+
+### What AAP Needs to Build:
+
+#### 1. AI Endpoint Configuration Storage
+- Store per-template or global AI config
+- Support OpenAI-compatible API standard
+- Secure credential storage (like existing AAP credentials)
+
+#### 2. Failure Context Collector
+When job fails, gather:
+- Task name, module, error message
+- Host facts (OS, version)
+- Relevant inventory variables
+- Last N lines of stdout/stderr
+- Format as structured prompt
+
+#### 3. AI API Client
+- POST to configured AI endpoint
+- Handle OpenAI-compatible /v1/chat/completions
+- Timeout/retry logic
+- Parse response
+
+#### 4. Insights Display Engine
+- Render AI response in job output UI
+- Store insights in job metadata
+- Make searchable/filterable
+
+#### 5. Optional: Auto-Remediation Generator
+If AI returns playbook YAML in response:
+- Create new job template with:
+  - Name: "Fix: [original template] - [issue]"
+  - Playbook: AI-generated content
+  - Same inventory/credentials
+  - Tag as "AI-Generated Remediation"
+
+## Example User Workflow
+
+### Scenario: User Creates Job Template
+
+1. User creates "Deploy Web App" job template
+2. User checks ✅ Enable AI Insights
+3. User configures AI endpoint (or uses org-level default)
+4. User runs job → fails on "Install Apache"
+5. AAP automatically:
+   - Captures failure context
+   - Sends to AI endpoint
+   - Gets back: "Apache package name is httpd not apache2 on RHEL"
+   - Displays insights in job output
+   - Optionally creates remediation template
+6. User sees:
+   - **Option A:** Insights in AAP UI → manually fix playbook
+   - **Option B:** Click "Generate Fix Template" → review AI playbook → run it
+   - **Option C:** ServiceNow ticket auto-created with insights
+
+## Why This Approach Wins
+
+### ✅ Minimal Architectural Overhead
+- No new services (EDA, message bus, observability)
+- Leverage existing AAP job execution engine
+- Uses existing credential/API framework
+
+### ✅ Customer Brings Their Own AI
+Not locked to Red Hat AI or Lightspeed. Support any OpenAI-compatible endpoint:
+- Customer's on-prem LLM (vLLM, Ollama, Red Hat AI)
+- Azure OpenAI
+- AWS Bedrock (with adapter)
+- OpenAI directly
+
+### ✅ Incremental Adoption
+- Enable per job template (not all-or-nothing)
+- Start with high-value/high-failure templates
+- Prove ROI before scaling
+
+### ✅ No Playbook Authoring Required
+- Users don't write AI integration playbooks
+- AAP handles prompt construction automatically
+- AI just needs to return structured insights
+
+### ✅ Fits Existing Mental Model
+- "Job templates have settings like credentials, surveys, webhooks... now they have AI insights"
+- Not a separate "AIOps product" - just a feature
+
+## Phase 1 Deliverables (MVP)
+
+| Component | Effort | Description |
+|-----------|--------|-------------|
+| UI Checkbox | Low | "Enable AI Insights" in job template settings |
+| AI Config Storage | Low | Store endpoint URL, token, model per template or org-level |
+| Context Collector | Medium | Gather failure context when job fails |
+| AI API Client | Medium | POST to OpenAI-compatible endpoint, parse response |
+| Insights Display | Medium | Render AI response in job output UI |
+| Documentation | Low | How to configure AI endpoint, example prompts |
+
+**Total Effort:** 1-2 engineers, 2-3 months for MVP
+
+---
+
+# Phase 2: Auto-Remediation Templates
+
+Once Phase 1 proves value:
+
+## Feature: "Generate Remediation Template" Button
+
+When AI returns a playbook in its response:
+
+```
+🤖 AI INSIGHTS:
+...
+REMEDIATION PLAYBOOK:
+---
+- name: Fix subscription issue
+  hosts: server01
+  tasks:
+    - name: Enable repository
+      command: subscription-manager repos --enable=...
+
+[✨ Create Remediation Job Template]
+```
+
+Clicking button auto-creates:
+- New job template: "AI Fix: Install PostgreSQL - Subscription Issue"
+- Playbook stored in Git or AAP's project
+- Ready to review and run
+
+---
+
+# Phase 3: Proactive AI (Optional)
+
+For successful jobs too: "AI Optimization Suggestions"
+
+```
+Job #458 - SUCCESS ✅
+
+🤖 AI SUGGESTIONS:
+
+This playbook could be optimized:
+- Consider using ansible.builtin.package instead of dnf
+  for cross-platform compatibility
+- Add error handling for subscription failures
+- Use ansible_facts.distribution instead of hardcoded OS
+
+[View Optimized Playbook] [Dismiss]
+```
+
+---
+
+# Integration with Your AIOps Vision
+
+This Phase 1 feature becomes the foundation for your full AIOps solution:
+
+```
+Phase 1: AI Insights (checkbox)
+  └─> Proves AI value in existing workflows
+
+Phase 2: Auto-Remediation Templates
+  └─> Generates fixes automatically
+
+Phase 3: Event-Driven Ansible (EDA)
+  └─> Auto-trigger jobs with AI insights
+  └─> Uses same AI endpoint config from Phase 1
+
+Phase 4: Multi-LLM Workflows
+  └─> Chain multiple AI calls for complex diagnostics
+  └─> Still just checkboxes/configs in AAP
+```
+
+**Key insight:** The checkbox in Phase 1 becomes the integration point for everything else. You're not building a separate AIOps product - you're making AAP natively AI-aware.
+
+---
+
+# Marketing This Internally
+
+## Feature Name
+"AI-Assisted Job Analysis" or "Intelligent Failure Diagnostics"
+
+## Elevator Pitch
+"Enable AI insights on any job template with a single checkbox. When jobs fail, AAP automatically analyzes the failure, explains the root cause in plain English, and suggests remediation steps - using your own AI endpoint. No new services, no architectural changes, just smarter automation."
+
+## Competitive Differentiation
+
+- **Not SaaS-only:** Customers bring their own AI (on-prem, air-gapped)
+- **Not rigid:** Works with any OpenAI-compatible LLM
+- **Not all-or-nothing:** Enable per job template
+- **Not just diagnosis:** Can auto-generate remediation templates

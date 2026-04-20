@@ -27,5 +27,5 @@
             organization: "Default"
             job_args:
               extra_vars:
-                alert_text: "{{ event.payload.result | default(event.payload.search_name) }}"
+                alert_payload: "{{ event.payload | to_json }}"
                 alert_search_name: "{{ event.payload.search_name }}"
