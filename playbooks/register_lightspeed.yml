@@ -18,19 +18,32 @@
       changed_when: false
       failed_when: false
 
-    - name: Unregister from wrong account if needed
+    - name: Display current RHSM account
+      ansible.builtin.debug:
+        msg: "{{ rhsm_identity.stdout_lines | default(['Not registered']) }}"
+
+    - name: Unregister insights-client from old account
+      ansible.builtin.command:
+        cmd: insights-client --unregister
+      failed_when: false
+      changed_when: true
+
+    - name: Unregister from current RHSM account
       community.general.redhat_subscription:
         state: absent
-      when: rhsm_identity.rc == 0 and (rhsm_username is defined and rhsm_username | length > 0)
 
-    - name: Register with Red Hat Subscription Manager
+    - name: Clean subscription-manager state
+      ansible.builtin.command:
+        cmd: subscription-manager clean
+      changed_when: true
+
+    - name: Register with correct Red Hat account
       community.general.redhat_subscription:
         state: present
-        username: "{{ rhsm_username }}"
-        password: "{{ rhsm_password }}"
+        username: "{{ scm_username }}"
+        password: "{{ scm_password }}"
         auto_attach: true
         force_register: true
-      when: rhsm_username is defined and rhsm_username | length > 0
 
     - name: Verify RHSM registration
       ansible.builtin.command:
@@ -38,7 +51,7 @@
       register: rhsm_verify
       changed_when: false
 
-    - name: Display RHSM account info
+    - name: Display new RHSM account info
       ansible.builtin.debug:
         msg: "{{ rhsm_verify.stdout_lines }}"
 
