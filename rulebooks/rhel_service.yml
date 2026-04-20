@@ -27,5 +27,6 @@
             organization: "Default"
             job_args:
               extra_vars:
-                alert_text: "{{ event.payload.result | default(event.payload.search_name) }}"
+                alert_text: "{{ event.payload.result._raw | default(event.payload.search_name) }}"
                 alert_search_name: "{{ event.payload.search_name }}"
+                alert_host: "{{ event.payload.result.host | default('unknown') }}"
