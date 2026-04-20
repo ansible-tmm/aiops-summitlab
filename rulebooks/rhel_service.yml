@@ -27,8 +27,5 @@
             organization: "Default"
             job_args:
               extra_vars:
-                alert_host: "{{ event.payload.result.host }}"
-                alert_process: "{{ event.payload.result.process }}"
-                alert_pid: "{{ event.payload.result.pid }}"
-                alert_source: "{{ event.payload.result.source }}"
+                alert_host: "node1"
                 alert_search_name: "{{ event.payload.search_name }}"
