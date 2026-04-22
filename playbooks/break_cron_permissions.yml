@@ -1,18 +1,18 @@
 ---
-- name: Break cron with insecure file permissions
+- name: Break cron with invalid user
   hosts: all
   gather_facts: false
   become: true
 
   tasks:
-    - name: Create crontab file with insecure permissions
+    - name: Create crontab with nonexistent user
       ansible.builtin.copy:
-        content: "* * * * * root /usr/bin/logger 'cron heartbeat'\n"
-        dest: /etc/cron.d/insecure-job
+        content: "* * * * * nonexistent_user /bin/true\n"
+        dest: /etc/cron.d/bad-user-job
         owner: root
         group: root
-        mode: "0777"
+        mode: "0644"
 
     - name: Display status
       ansible.builtin.debug:
-        msg: "Insecure cron file (mode 0777) written to /etc/cron.d/insecure-job on {{ inventory_hostname }}. crond will refuse to run it."
+        msg: "Cron job with nonexistent user written to /etc/cron.d/bad-user-job on {{ inventory_hostname }}. crond will log ERROR every minute."

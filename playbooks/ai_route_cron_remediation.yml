@@ -9,8 +9,7 @@
   gather_facts: false
 
   vars:
-    alert_text: ""
-    alert_search_name: ""
+    webhook_payload: {}
 
     llm_api_url: ""
     llm_api_key: ""
@@ -24,15 +23,31 @@
     mattermost_token: ""
 
   tasks:
-    - name: Validate alert input
+    - name: Validate webhook payload
       ansible.builtin.assert:
         that:
-          - alert_text | length > 0
-        fail_msg: "No alert_text provided."
+          - webhook_payload | length > 0
+        fail_msg: "No webhook_payload provided."
+
+    - name: Extract alert details from Splunk payload
+      ansible.builtin.set_fact:
+        alert_host: "{{ webhook_payload.result.host | default('node1') }}"
+        alert_text: "{{ webhook_payload.result._raw | default('crond failure detected by Splunk') }}"
+        alert_search_name: "{{ webhook_payload.search_name | default('rhel-cron-failure') }}"
+
+    - name: Display extracted alert
+      ansible.builtin.debug:
+        msg:
+          - "Host: {{ alert_host }}"
+          - "Syslog: {{ alert_text }}"
+
+    - name: Set controller URL
+      ansible.builtin.set_fact:
+        controller_url: "{{ controller_host if controller_host.startswith('https://') else 'https://' + controller_host }}"
 
     - name: Fetch job template catalog from AAP
       ansible.builtin.uri:
-        url: "https://{{ controller_host }}/api/controller/v2/job_templates/?page_size=100&search=cron"
+        url: "{{ controller_url }}/api/controller/v2/job_templates/?page_size=100&search=cron"
         method: GET
         url_username: "{{ controller_username }}"
         url_password: "{{ controller_password }}"
@@ -66,11 +81,11 @@
 
           INSTRUCTIONS:
           - Analyze the syslog message and write a clear, non-technical explanation of what happened
-          - Identify the root cause: syntax error in a crontab file, insecure file permissions, or the service was stopped/crashed
+          - Identify the root cause: syntax error in a crontab file (bad minute/hour/day), or invalid user referenced in a crontab entry (getpwnam failed)
           - Select exactly ONE job template that fixes this specific root cause
           - If confidence is below 70% or the alert does not clearly match any template, set template to "ESCALATE"
           - Respond with ONLY a JSON object in this exact format:
-          {"template": "<exact template name>", "confidence": <0-100>, "analysis": "<2-3 sentences explaining what the syslog message means and what went wrong>", "root_cause": "<syntax_error|bad_permissions|service_stopped|unknown>", "recommendation": "<one sentence describing what the fix will do>"}
+          {"template": "<exact template name>", "confidence": <0-100>, "analysis": "<2-3 sentences explaining what the syslog message means and what went wrong>", "root_cause": "<syntax_error|invalid_user|unknown>", "recommendation": "<one sentence describing what the fix will do>"}
 
     - name: Call LLM for routing decision
       ansible.builtin.uri:
@@ -143,6 +158,7 @@
           routing_confidence: "{{ routing_decision.confidence }}"
           routing_reasoning: "{{ routing_decision.recommendation }}"
           alert_text: "{{ alert_text }}"
+          alert_host: "{{ alert_host }}"
 
     - name: Fail if AI says ESCALATE
       ansible.builtin.fail:

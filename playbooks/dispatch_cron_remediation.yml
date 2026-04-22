@@ -18,6 +18,10 @@
     controller_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
 
   tasks:
+    - name: Set controller URL
+      ansible.builtin.set_fact:
+        controller_url: "{{ controller_host if controller_host.startswith('https://') else 'https://' + controller_host }}"
+
     - name: Validate routing decision
       ansible.builtin.assert:
         that:
@@ -34,7 +38,7 @@
 
     - name: Find job template in AAP
       ansible.builtin.uri:
-        url: "https://{{ controller_host }}/api/controller/v2/job_templates/?name={{ selected_template | urlencode }}"
+        url: "{{ controller_url }}/api/controller/v2/job_templates/?name={{ selected_template | urlencode }}"
         method: GET
         url_username: "{{ controller_username }}"
         url_password: "{{ controller_password }}"
@@ -51,13 +55,14 @@
 
     - name: Launch remediation job template
       ansible.builtin.uri:
-        url: "https://{{ controller_host }}/api/controller/v2/job_templates/{{ template_lookup.json.results[0].id }}/launch/"
+        url: "{{ controller_url }}/api/controller/v2/job_templates/{{ template_lookup.json.results[0].id }}/launch/"
         method: POST
         url_username: "{{ controller_username }}"
         url_password: "{{ controller_password }}"
         force_basic_auth: true
         body_format: json
         body:
+          limit: "{{ alert_host | default('node1') }}"
           extra_vars:
             routed_by: "ai"
             routing_confidence: "{{ routing_confidence }}"
