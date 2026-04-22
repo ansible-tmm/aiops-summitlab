@@ -3,6 +3,6 @@
   hosts: all
   become: true
   vars:
-    crypto_policies_policy: DEFAULT
+    crypto_policies_policy: "{{ crypto_policy | default('DEFAULT') }}"
   roles:
     - redhat.rhel_system_roles.crypto_policies

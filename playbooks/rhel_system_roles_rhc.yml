@@ -3,6 +3,6 @@
   hosts: all
   become: true
   vars:
-    rhc_state: present
+    rhc_state: "{{ rhc_desired_state | default('present') }}"
   roles:
     - redhat.rhel_system_roles.rhc

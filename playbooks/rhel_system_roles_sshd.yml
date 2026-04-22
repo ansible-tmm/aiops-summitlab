@@ -3,7 +3,7 @@
   hosts: all
   become: true
   vars:
-    sshd_PermitRootLogin: "no"
-    sshd_MaxAuthTries: 3
+    sshd_PermitRootLogin: "{{ sshd_permit_root_login | default('no') }}"
+    sshd_MaxAuthTries: "{{ sshd_max_auth_tries | default(3) }}"
   roles:
     - redhat.rhel_system_roles.sshd

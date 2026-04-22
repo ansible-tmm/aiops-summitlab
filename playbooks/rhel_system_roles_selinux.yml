@@ -3,10 +3,10 @@
   hosts: all
   become: true
   vars:
-    selinux_state: enforcing
+    selinux_state: "{{ selinux_desired_state | default('enforcing') }}"
     selinux_booleans:
-      - name: httpd_can_network_connect
-        state: true
-        persistent: true
+      - name: "{{ selinux_boolean_1_name | default('httpd_can_network_connect') }}"
+        state: "{{ selinux_boolean_1_state | default(true) }}"
+        persistent: "{{ selinux_boolean_1_persistent | default(true) }}"
   roles:
     - redhat.rhel_system_roles.selinux

@@ -4,10 +4,10 @@
   become: true
   vars:
     firewall:
-      - previous: replaced
-      - service: ssh
-        state: enabled
-      - service: http
-        state: enabled
+      - previous: "{{ firewall_previous | default('replaced') }}"
+      - service: "{{ firewall_service_1 | default('ssh') }}"
+        state: "{{ firewall_service_1_state | default('enabled') }}"
+      - service: "{{ firewall_service_2 | default('http') }}"
+        state: "{{ firewall_service_2_state | default('enabled') }}"
   roles:
     - redhat.rhel_system_roles.firewall
