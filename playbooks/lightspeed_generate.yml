@@ -1,40 +1,59 @@
 ---
-- name: Interact with Ansible Lightspeed API and Generate Ansible Playbook
+- name: Generate Ansible Playbook via LiteLLM
   hosts: localhost
   gather_facts: false
+  vars:
+    llm_model: "claude-sonnet-4-6"
+
   tasks:
-    - name: Include vars
-      ansible.builtin.include_vars:
-        file: "../vars/ls_vars.yml"
-    - name: Send request to AI API
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - llm_api_url is defined
+          - llm_api_key is defined
+          - lightspeed_prompt is defined
+        fail_msg: "Required variables are missing. Ensure llm_api_url, llm_api_key, and lightspeed_prompt are defined."
+
+    - name: Send request to LiteLLM API
       ansible.builtin.uri:
-        url: "{{ input_lightspeed_url | default('https://c.ai.ansible.redhat.com/api/v0/ai/generations/') }}"
+        url: "{{ llm_api_url }}"
         method: POST
         headers:
           Content-Type: "application/json"
-          Authorization: "Bearer {{ lightspeed_wca_token }}"
+          Authorization: "Bearer {{ llm_api_key }}"
         body_format: json
         body:
-          text: "{{ lightspeed_prompt }}"
+          model: "{{ llm_model }}"
+          messages:
+            - role: system
+              content: >-
+                You are an Ansible playbook generator. Respond with ONLY valid
+                YAML for an Ansible playbook. Do not include any explanation,
+                markdown formatting, or code fences. Output raw YAML only.
+            - role: user
+              content: "{{ lightspeed_prompt }}"
+          temperature: 0.2
+        timeout: 120
       register: response
 
     - name: Display API response
       ansible.builtin.debug:
-        msg: "{{ response.json }}"
+        msg: "{{ response.json.choices[0].message.content }}"
 
-    - name: Preserve raw YAML playbook (string)
+    - name: Extract playbook YAML from response
       ansible.builtin.set_fact:
-        lightspeed_playbook_raw: "{{ response.json.playbook }}"
+        raw_content: "{{ response.json.choices[0].message.content }}"
+
+    - name: Strip markdown code fences if present
+      ansible.builtin.set_fact:
+        lightspeed_playbook_raw: >-
+          {{ raw_content | regex_replace('(?s)^```(?:yaml|yml)?\n', '') | regex_replace('\n```\s*$', '') }}
 
     - name: Set stat on raw playbook YAML
       ansible.builtin.set_stats:
         data:
           lightspeed_playbook: "{{ lightspeed_playbook_raw }}"
 
-    - name: Display Ansible Playbook in JSON
+    - name: Display generated playbook
       ansible.builtin.debug:
         msg: "{{ lightspeed_playbook_raw }}"
-
-    - name: Display Ansible Playbook in YAML
-      ansible.builtin.debug:
-        msg: "{{ lightspeed_playbook_raw | to_nice_yaml(sort_keys=False) }}"
