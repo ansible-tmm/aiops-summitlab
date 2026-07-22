@@ -29,6 +29,7 @@
       ansible.controller.workflow_job_template:
         name: Remediation Workflow
         organization: Default
+        ask_variables_on_launch: true
         state: present
         survey_enabled: true
         survey_spec: "{{ lookup('template', playbook_dir + '/templates/survey.j2') | from_yaml  }}"

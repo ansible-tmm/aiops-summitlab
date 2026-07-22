@@ -14,6 +14,7 @@
         description: "Self-healing workflow for RHEL service failures"
         organization: "Default"
         inventory: "lab-inventory"
+        ask_variables_on_launch: true
         state: present
         workflow_nodes:
           - identifier: notify_mattermost

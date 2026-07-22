@@ -65,6 +65,7 @@
         description: "AI-driven network remediation workflow with human approval"
         organization: "Default"
         inventory: "network-inventory"
+        ask_variables_on_launch: true
         state: present
         workflow_nodes:
           - identifier: create_playbook_ai
