@@ -1,21 +1,14 @@
 ---
-- name: Interact with Ansible Lightspeed API and Generate OSPF Fix Playbook
+- name: Generate OSPF Fix Playbook via Claude AI
   hosts: localhost
   gather_facts: false
   vars:
-    lightspeed_url: "https://c.ai.ansible.redhat.com/api/v0/ai/generations/"
+    llm_url: "https://maas-rhdp.apps.maas.redhatworkshops.io/v1/chat/completions"
+    llm_model: "claude-sonnet-4-6"
     gitea_repo: "lightspeed_playbooks"
     gitea_user: "lab-user"
     gitea_email: "lab-user@example.org"
-    lightspeed_prompt: |
-       "Create a playbook and name it 'OSPF Fix'
-        host ==  cisco-rtr1
-        create a task that shows the status of Tunnel0 and register the output
-        run a new task using cisco.ios.ios_config with parents 'interface Tunnel0' that administratively enables interface tunnel0 when stdout contains 'administratively down'
-        run a new task when the previous output contains 'line protocol is up' in stdout[0] in this task do a 'show ip ospf interface tunnel0' and register as new_output
-        run a new task using cisco.ios.ios_config with parents 'interface Tunnel0' with a list of two conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output doesn't contain 'Network Type POINT_TO_POINT' This task would then configure interface tunnel0 with the command 'ip ospf network point-to-point'
-        run a new task using cisco.ios.ios_config with parents 'interface Tunnel0' with a list of three conditionals. The first condition is output contains 'line protocol is up' in stdout[0] and second condition is when new_output does contain 'Network Type POINT_TO_POINT' the third condition is when new_output doesn't contain 'Hello 10' This task would then configure interface tunnel0 with the command 'ip ospf hello-interval 10'"
-        
+
   tasks:
     - name: Include vars
       ansible.builtin.include_vars:
@@ -26,37 +19,86 @@
         that:
           - gitea_url is defined
           - gitea_url | length > 0
-          - lightspeed_wca_token is defined
-        fail_msg: "Required variables are missing. Ensure gitea_url and lightspeed_wca_token are defined."
+          - litellm_virtual_key is defined
+        fail_msg: "Required variables missing. Ensure gitea_url and litellm_virtual_key are defined."
         success_msg: "All required variables are present."
 
-    - name: Send request to Ansible Lightspeed API
+    - name: Call Claude to generate OSPF fix playbook
       ansible.builtin.uri:
-        url: "{{ lightspeed_url }}"
+        url: "{{ llm_url }}"
         method: POST
         headers:
+          Authorization: "Bearer {{ litellm_virtual_key }}"
           Content-Type: "application/json"
-          Authorization: "Bearer {{ lightspeed_wca_token }}"
         body_format: json
         body:
-          text: "{{ lightspeed_prompt }}"
-      register: response
+          model: "{{ llm_model }}"
+          temperature: 0.0
+          max_tokens: 2000
+          messages:
+            - role: system
+              content: |
+                You are an Ansible playbook generator for Cisco IOS network automation.
+                Output valid YAML only. No markdown fences, no explanation, no preamble.
+                The output must be directly usable as an Ansible playbook file.
+            - role: user
+              content: |
+                Generate an Ansible playbook with exactly these specifications:
 
-    - name: Display Lightspeed API response
-      ansible.builtin.debug:
-        msg: "{{ response.json }}"
+                - play name: OSPF Fix
+                - hosts: cisco-rtr1
+                - gather_facts: false
 
-    - name: Set fact for Ansible Lightspeed generated playbook
+                Tasks in order:
+
+                Task 1:
+                  name: Show ip ospf interface status
+                  module: cisco.ios.ios_command
+                  commands: ['show ip ospf interface tunnel 0']
+                  register: output
+
+                Task 2:
+                  name: Admin enable tunnel0
+                  module: cisco.ios.ios_config
+                  parents: 'interface Tunnel0'
+                  lines: ['no shutdown']
+                  when: "'administratively down' in output.stdout[0]"
+
+                Task 3:
+                  name: Show ip ospf interface after enable
+                  module: cisco.ios.ios_command
+                  commands: ['show ip ospf interface tunnel 0']
+                  register: new_output
+                  when: "'line protocol is up' in output.stdout[0]"
+
+                Task 4:
+                  name: Configure ospf network point-to-point
+                  module: cisco.ios.ios_config
+                  parents: 'interface Tunnel0'
+                  lines: ['ip ospf network point-to-point']
+                  when (YAML list of two conditions):
+                    - "'line protocol is up' in output.stdout[0]"
+                    - "'Network Type POINT_TO_POINT' not in new_output.stdout[0]"
+
+                Task 5:
+                  name: Configure ospf hello-interval
+                  module: cisco.ios.ios_config
+                  parents: 'interface Tunnel0'
+                  lines: ['ip ospf hello-interval 10']
+                  when (YAML list of three conditions):
+                    - "'line protocol is up' in output.stdout[0]"
+                    - "'Network Type POINT_TO_POINT' in new_output.stdout[0]"
+                    - "'Hello 10' not in new_output.stdout[0]"
+        status_code: 200
+      register: llm_response
+
+    - name: Set fact for generated playbook
       ansible.builtin.set_fact:
-        lightspeed_playbook: "{{ response.json.playbook }}"
+        generated_playbook: "{{ llm_response.json.choices[0].message.content | regex_replace('(?s)```(?:yaml)?\\s*', '') | regex_replace('(?s)```\\s*$', '') | trim }}"
 
-    - name: Display generated playbook in JSON format
+    - name: Display generated playbook
       ansible.builtin.debug:
-        msg: "{{ lightspeed_playbook }}"
-
-    - name: Display generated playbook in YAML format
-      ansible.builtin.debug:
-        msg: "{{ lightspeed_playbook }}"
+        msg: "{{ generated_playbook }}"
 
     - name: Retrieve Gitea repository
       ansible.scm.git_retrieve:
@@ -95,10 +137,10 @@
       register: repository
       delegate_to: localhost
       run_once: true
-      
-    - name: Save Lightspeed generated playbook to repository
+
+    - name: Save generated playbook to repository
       ansible.builtin.copy:
-        content: "{{ lightspeed_playbook }}"
+        content: "{{ generated_playbook }}"
         dest: "{{ repository['path'] }}/lightspeed-response-network.yml"
         mode: '0644'
 
@@ -113,4 +155,4 @@
 
     - name: Display repository path
       ansible.builtin.debug:
-        msg: "Lightspeed playbook saved to {{ repository['path'] }}/lightspeed-response-network.yml"
+        msg: "Playbook saved to {{ repository['path'] }}/lightspeed-response-network.yml"
