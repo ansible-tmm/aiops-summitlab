@@ -48,7 +48,7 @@
 
     - name: Set fact for Ansible Lightspeed generated playbook
       ansible.builtin.set_fact:
-        lightspeed_playbook: "{{ response.json.playbook | from_yaml }}"
+        lightspeed_playbook: "{{ response.json.playbook }}"
 
     - name: Display generated playbook in JSON format
       ansible.builtin.debug:
@@ -56,7 +56,7 @@
 
     - name: Display generated playbook in YAML format
       ansible.builtin.debug:
-        msg: "{{ lightspeed_playbook | to_nice_yaml(sort_keys=False) }}"
+        msg: "{{ lightspeed_playbook }}"
 
     - name: Retrieve Gitea repository
       ansible.scm.git_retrieve:
@@ -98,7 +98,7 @@
       
     - name: Save Lightspeed generated playbook to repository
       ansible.builtin.copy:
-        content: "{{ lightspeed_playbook | to_nice_yaml(sort_keys=False) }}"
+        content: "{{ lightspeed_playbook }}"
         dest: "{{ repository['path'] }}/lightspeed-response-network.yml"
         mode: '0644'
 
