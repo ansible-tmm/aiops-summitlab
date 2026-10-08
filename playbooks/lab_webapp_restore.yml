@@ -1,0 +1,28 @@
+---
+- name: Restore lab web application service
+  hosts: all
+  become: true
+
+  vars:
+    webapp_health_url: "http://localhost:{{ instana_webapp_port | default(8080) }}/health"
+
+  tasks:
+    - name: Start lab-webapp service
+      ansible.builtin.systemd:
+        name: lab-webapp
+        state: started
+        enabled: true
+
+    - name: Wait for lab-webapp to respond
+      ansible.builtin.uri:
+        url: "{{ webapp_health_url }}"
+        method: GET
+        status_code: 200
+      register: _health
+      retries: 10
+      delay: 5
+      until: _health.status == 200
+
+    - name: Report webapp restored
+      ansible.builtin.debug:
+        msg: "lab-webapp service restored and healthy on {{ inventory_hostname }}"

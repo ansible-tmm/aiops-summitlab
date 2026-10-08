@@ -1,0 +1,19 @@
+---
+- name: Break lab web application service
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Stop lab-webapp service
+      ansible.builtin.systemd:
+        name: lab-webapp
+        state: stopped
+
+    - name: Confirm lab-webapp is stopped
+      ansible.builtin.systemd:
+        name: lab-webapp
+      register: _service_state
+
+    - name: Report webapp stopped
+      ansible.builtin.debug:
+        msg: "lab-webapp service stopped on {{ inventory_hostname }} - Instana should detect call rate drop within 60s"

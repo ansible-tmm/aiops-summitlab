@@ -1,0 +1,36 @@
+---
+- name: "Listen for Instana alerts on a webhook"
+  hosts: all
+
+  sources:
+    - name: "Webhook listener for Instana alerts"
+      ansible.eda.webhook:
+        host: 0.0.0.0
+        port: 5000
+
+  rules:
+    - name: "Trigger AI remediation on Instana OPEN alert"
+      condition: event.payload.issue.state == "OPEN"
+      actions:
+        - debug:
+            msg: |
+              Instana alert received!
+              Service: {{ event.payload.issue.entityLabel }}
+              Text: {{ event.payload.issue.text }}
+              Metric: {{ event.payload.issue.metric }}
+        - run_job_template:
+            name: "INSTANA | {{ guid }} | Restore Web App Service - Fix call rate drop and service outage"
+            organization: "Instana AIOps"
+            extra_vars:
+              instana_entity_label: "{{ event.payload.issue.entityLabel }}"
+              instana_alert_text: "{{ event.payload.issue.text }}"
+              instana_metric: "{{ event.payload.issue.metric }}"
+              instana_alert_state: "{{ event.payload.issue.state }}"
+
+    - name: "Log Instana alert resolution"
+      condition: event.payload.issue.state == "CLOSED"
+      actions:
+        - debug:
+            msg: |
+              Instana alert resolved!
+              Service: {{ event.payload.issue.entityLabel }}
