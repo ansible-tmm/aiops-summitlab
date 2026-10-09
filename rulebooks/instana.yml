@@ -19,7 +19,7 @@
               Text: {{ event.payload.issue.text }}
               Metric: {{ event.payload.issue.metric }}
         - run_job_template:
-            name: "INSTANA | {{ guid }} | Restore Web App Service - Fix call rate drop and service outage"
+            name: "INSTANA | {{ event.payload.issue.entityLabel | replace('lab-webapp-', '') }} | Restore Web App Service - Fix call rate drop and service outage"
             organization: "Instana AIOps"
             extra_vars:
               instana_entity_label: "{{ event.payload.issue.entityLabel }}"
