@@ -21,11 +21,13 @@
         - run_job_template:
             name: "INSTANA | {{ event.payload.issue.entityLabel | replace('lab-webapp-', '') }} | Restore Web App Service - Fix anomalously low calls"
             organization: "Instana AIOps"
-            extra_vars:
-              instana_entity_label: "{{ event.payload.issue.entityLabel }}"
-              instana_alert_text: "{{ event.payload.issue.text }}"
-              instana_metric: "{{ event.payload.issue.metric }}"
-              instana_alert_state: "{{ event.payload.issue.state }}"
+            job_args:
+              limit: "node2"
+              extra_vars:
+                instana_entity_label: "{{ event.payload.issue.entityLabel }}"
+                instana_alert_text: "{{ event.payload.issue.text }}"
+                instana_metric: "{{ event.payload.issue.metric }}"
+                instana_alert_state: "{{ event.payload.issue.state }}"
 
     - name: "Log Instana alert resolution"
       condition: event.payload.issue.state == "CLOSED"
