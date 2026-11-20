@@ -1,4 +1,6 @@
 ---
+# Idempotent: safe to re-run. Ensures each host is connected to the lab
+# Red Hat account via rhc and registered/tagged in Lightspeed (Insights).
 - name: Register with Red Hat Lightspeed
   hosts: all
   become: true
@@ -11,20 +13,37 @@
       ansible.builtin.debug:
         msg: "Sandbox ID for this lab: {{ sandbox_id }}"
 
+    # Never overwrite — a failed mid-run must not replace Satellite backup with CDN config
     - name: Save original rhsm.conf before reconfiguring
       ansible.builtin.copy:
         src: /etc/rhsm/rhsm.conf
         dest: /etc/rhsm/rhsm.conf.satellite-backup
         remote_src: true
+        force: false
 
     - name: Unregister from subscription manager
-      ansible.builtin.shell: subscription-manager unregister
-      ignore_errors: true
+      ansible.builtin.command:
+        cmd: subscription-manager unregister
+      register: rhsm_unreg
+      failed_when: false
+      changed_when: rhsm_unreg.rc == 0
 
-    - name: Remove katello-ca-consumer package
-      ansible.builtin.dnf:
-        name: katello-ca-consumer*
-        state: absent
+    # rpm --nodeps avoids dnf metadata refresh against broken Satellite SSL
+    - name: Remove katello-ca-consumer package without dnf
+      ansible.builtin.shell: |
+        set -eu
+        pkgs=$(rpm -qa 'katello-ca-consumer*' || true)
+        if [ -n "${pkgs}" ]; then
+          rpm -e --nodeps ${pkgs}
+          echo removed
+        else
+          echo absent
+        fi
+      args:
+        executable: /bin/bash
+      register: katello_rm
+      changed_when: "'removed' in katello_rm.stdout"
+      failed_when: false
 
     - name: Set network.fqdn in katello facts
       ansible.builtin.copy:
@@ -35,6 +54,7 @@
     - name: Disconnect from current RHC registration
       ansible.builtin.command:
         cmd: rhc disconnect
+      register: rhc_disconnect
       failed_when: false
       changed_when: true
 
@@ -51,22 +71,21 @@
     - name: Clean stale RHSM data
       ansible.builtin.command:
         cmd: subscription-manager clean
+      register: rhsm_clean
       changed_when: true
+      failed_when: false
 
     - name: Connect to correct Red Hat account via RHC
       ansible.builtin.command:
         cmd: "rhc connect --username {{ scm_username }} --password {{ scm_password }}"
       register: rhc_result
+      retries: 3
+      delay: 20
+      until: rhc_result.rc == 0
 
     - name: Display RHC connection result
       ansible.builtin.debug:
         msg: "{{ rhc_result.stdout_lines }}"
-
-    - name: Restore original rhsm.conf (keep satellite repo config)
-      ansible.builtin.copy:
-        src: /etc/rhsm/rhsm.conf.satellite-backup
-        dest: /etc/rhsm/rhsm.conf
-        remote_src: true
 
     - name: Write custom tags for lab grouping
       ansible.builtin.copy:
@@ -77,10 +96,14 @@
           lab_id: {{ sandbox_id }}
           environment: summit-lab
 
-    - name: Apply group tag and upload to Insights
+    # Must run while still pointed at CDN — restoring Satellite conf first breaks auth
+    - name: Register with Insights and apply group tag
       ansible.builtin.command:
-        cmd: "insights-client --group={{ sandbox_id }}"
+        cmd: "insights-client --register --group={{ sandbox_id }}"
       register: insights_result
+      retries: 5
+      delay: 20
+      until: insights_result.rc == 0
 
     - name: Display Insights registration
       ansible.builtin.debug:
@@ -88,3 +111,33 @@
           - "{{ insights_result.stdout_lines }}"
           - "Group/Tag: {{ sandbox_id }}"
           - "Account: {{ scm_username }} (org 12451665)"
+
+    - name: Restore original rhsm.conf (keep satellite repo config)
+      ansible.builtin.copy:
+        src: /etc/rhsm/rhsm.conf.satellite-backup
+        dest: /etc/rhsm/rhsm.conf
+        remote_src: true
+
+    # Katello CA is gone; keep Satellite repo URLs usable for the rest of the lab
+    - name: Disable SSL verification in redhat.repo
+      ansible.builtin.command:
+        cmd: >-
+          bash -c 'sed -i "s/sslverify = 1/sslverify = 0/g;
+          s/sslverifystatus = 1/sslverifystatus = 0/g"
+          /etc/yum.repos.d/redhat.repo'
+      changed_when: true
+      failed_when: false
+
+    - name: Set sslverify=0 globally in dnf.conf
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/dnf.conf
+        line: "sslverify=0"
+        regexp: "^sslverify"
+        state: present
+
+    - name: Set sslverifystatus=0 globally in dnf.conf
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/dnf.conf
+        line: "sslverifystatus=0"
+        regexp: "^sslverifystatus"
+        state: present
