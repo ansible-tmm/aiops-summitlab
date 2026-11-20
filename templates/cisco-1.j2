@@ -11,9 +11,9 @@ interface Tunnel0
  ip address 100.100.100.1 255.255.255.0
  ip mtu 1476
  ip ospf 1 area 0
- tunnel destination {{ hostvars['cisco-rtr2']['ansible_host'] }}
+ tunnel destination {{ rtr2_ip }}
 !
-logging host {{ bastion_ip }} transport tcp port 5514
+logging host {{ _bastion_resolved | default(bastion_ip) }} transport tcp port 5514
 !
 service timestamps debug datetime msec
 service timestamps log datetime msec

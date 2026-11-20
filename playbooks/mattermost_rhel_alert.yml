@@ -1,0 +1,37 @@
+---
+# Sends a Mattermost notification about a RHEL service failure.
+# Used as the first step in the RHEL-Self-Healing workflow.
+- name: Notify RHEL service failure via Mattermost
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    mattermost_token: ""
+    mattermost_instance: ""
+    input_linux_service: "crond"
+
+  tasks:
+    - name: Fail if Mattermost config is missing
+      ansible.builtin.fail:
+        msg: "Mattermost instance and token must be set"
+      when: >-
+        mattermost_instance | default('') | trim == ''
+        or mattermost_token | default('') | trim == ''
+
+    - name: Send RHEL service alert to Mattermost
+      community.general.mattermost:
+        url: "{{ mattermost_instance }}"
+        api_key: "{{ mattermost_token }}"
+        attachments:
+          - text: "ALERT: RHEL Service Down"
+            color: "#ff0000"
+            title: "{{ input_linux_service }} stopped on RHEL node"
+            fields:
+              - title: Service
+                value: "{{ input_linux_service }}"
+                short: true
+              - title: Action Required
+                value: "Investigate and create remediation playbook"
+                short: true
+      delegate_to: localhost
