@@ -1,0 +1,90 @@
+---
+- name: Register with Red Hat Lightspeed
+  hosts: all
+  become: true
+  tasks:
+    - name: Extract sandbox ID from hostname
+      ansible.builtin.set_fact:
+        sandbox_id: "{{ ansible_fqdn | regex_search('sandbox-([a-z0-9]+)-', '\\1') | default(['unknown'], true) | first }}"
+
+    - name: Display sandbox ID
+      ansible.builtin.debug:
+        msg: "Sandbox ID for this lab: {{ sandbox_id }}"
+
+    - name: Save original rhsm.conf before reconfiguring
+      ansible.builtin.copy:
+        src: /etc/rhsm/rhsm.conf
+        dest: /etc/rhsm/rhsm.conf.satellite-backup
+        remote_src: true
+
+    - name: Unregister from subscription manager
+      ansible.builtin.shell: subscription-manager unregister
+      ignore_errors: true
+
+    - name: Remove katello-ca-consumer package
+      ansible.builtin.dnf:
+        name: katello-ca-consumer*
+        state: absent
+
+    - name: Set network.fqdn in katello facts
+      ansible.builtin.copy:
+        dest: /etc/rhsm/facts/katello.facts
+        content: '{"network.fqdn": "{{ inventory_hostname }}"}'
+        mode: ug=rw,o=r
+
+    - name: Disconnect from current RHC registration
+      ansible.builtin.command:
+        cmd: rhc disconnect
+      failed_when: false
+      changed_when: true
+
+    - name: Point subscription-manager to Red Hat CDN for rhc connect
+      ansible.builtin.command:
+        cmd: >-
+          subscription-manager config
+          --server.hostname=subscription.rhsm.redhat.com
+          --server.prefix=/subscription
+          --server.port=443
+          --rhsm.baseurl=https://cdn.redhat.com
+      changed_when: true
+
+    - name: Clean stale RHSM data
+      ansible.builtin.command:
+        cmd: subscription-manager clean
+      changed_when: true
+
+    - name: Connect to correct Red Hat account via RHC
+      ansible.builtin.command:
+        cmd: "rhc connect --username {{ scm_username }} --password {{ scm_password }}"
+      register: rhc_result
+
+    - name: Display RHC connection result
+      ansible.builtin.debug:
+        msg: "{{ rhc_result.stdout_lines }}"
+
+    - name: Restore original rhsm.conf (keep satellite repo config)
+      ansible.builtin.copy:
+        src: /etc/rhsm/rhsm.conf.satellite-backup
+        dest: /etc/rhsm/rhsm.conf
+        remote_src: true
+
+    - name: Write custom tags for lab grouping
+      ansible.builtin.copy:
+        dest: /etc/insights-client/tags.yaml
+        mode: "0644"
+        content: |
+          group: {{ sandbox_id }}
+          lab_id: {{ sandbox_id }}
+          environment: summit-lab
+
+    - name: Apply group tag and upload to Insights
+      ansible.builtin.command:
+        cmd: "insights-client --group={{ sandbox_id }}"
+      register: insights_result
+
+    - name: Display Insights registration
+      ansible.builtin.debug:
+        msg:
+          - "{{ insights_result.stdout_lines }}"
+          - "Group/Tag: {{ sandbox_id }}"
+          - "Account: {{ scm_username }} (org 12451665)"

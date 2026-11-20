@@ -1,0 +1,105 @@
+---
+# Creates the Cron-AIOps-Workflow in AAP.
+# Node 1: AI Router analyzes syslog alert and selects the correct fix
+# Node 2: Approval gate for human review
+# Node 3: Dispatcher launches the AI-selected fix JT
+- name: Create Cron AIOps Workflow
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Delete existing workflow if present
+      ansible.controller.workflow_job_template:
+        name: "Cron-AIOps-Workflow"
+        organization: "Default"
+        state: absent
+
+    - name: Create Cron AIOps Workflow Template
+      ansible.controller.workflow_job_template:
+        name: "Cron-AIOps-Workflow"
+        description: "AI-driven cron remediation: route alert to correct fix via LLM"
+        organization: "Default"
+        inventory: "lab-inventory"
+        ask_variables_on_launch: true
+        state: present
+
+    - name: Add AI Router node
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "Cron-AIOps-Workflow"
+        organization: "Default"
+        identifier: "ai_router"
+        unified_job_template: "AI Route Cron Remediation"
+        state: present
+
+    - name: Add Approval node
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "Cron-AIOps-Workflow"
+        organization: "Default"
+        identifier: "approval_gate"
+        approval_node:
+          name: "Review AI Routing Decision"
+          description: "Review the AI-selected cron fix before applying"
+          timeout: 900
+        state: present
+
+    - name: Add Dispatch node
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "Cron-AIOps-Workflow"
+        organization: "Default"
+        identifier: "dispatch_fix"
+        unified_job_template: "Dispatch Cron Remediation"
+        state: present
+
+    - name: Link AI Router to Approval on success
+      ansible.controller.workflow_job_template_node:
+        workflow_job_template: "Cron-AIOps-Workflow"
+        organization: "Default"
+        identifier: "ai_router"
+        unified_job_template: "AI Route Cron Remediation"
+        success_nodes:
+          - "approval_gate"
+        state: present
+
+    - name: Look up workflow template ID
+      ansible.builtin.uri:
+        url: "{{ lookup('env', 'CONTROLLER_HOST') }}/api/controller/v2/workflow_job_templates/?name=Cron-AIOps-Workflow"
+        method: GET
+        url_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+        url_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: wf_lookup
+
+    - name: Get workflow node IDs
+      ansible.builtin.uri:
+        url: "{{ lookup('env', 'CONTROLLER_HOST') }}/api/controller/v2/workflow_job_templates/{{ wf_lookup.json.results[0].id }}/workflow_nodes/"
+        method: GET
+        url_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+        url_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+        force_basic_auth: true
+        validate_certs: false
+      register: wf_nodes
+
+    - name: Find approval node ID
+      ansible.builtin.set_fact:
+        approval_node_id: "{{ wf_nodes.json.results | selectattr('identifier', 'equalto', 'approval_gate') | map(attribute='id') | first }}"
+        dispatch_node_id: "{{ wf_nodes.json.results | selectattr('identifier', 'equalto', 'dispatch_fix') | map(attribute='id') | first }}"
+
+    - name: Link Approval to Dispatch on success
+      ansible.builtin.uri:
+        url: "{{ lookup('env', 'CONTROLLER_HOST') }}/api/controller/v2/workflow_job_template_nodes/{{ approval_node_id }}/success_nodes/"
+        method: POST
+        url_username: "{{ lookup('env', 'CONTROLLER_USERNAME') }}"
+        url_password: "{{ lookup('env', 'CONTROLLER_PASSWORD') }}"
+        force_basic_auth: true
+        body_format: json
+        body: "{{ {'id': dispatch_node_id | int} }}"
+        validate_certs: false
+        status_code: [200, 201, 204]
+
+    - name: Display workflow creation status
+      ansible.builtin.debug:
+        msg: >-
+          Cron-AIOps-Workflow created with 3 nodes:
+          AI Router -> Approval Gate -> Dispatch Remediation

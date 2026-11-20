@@ -1,0 +1,17 @@
+---
+- name: RHEL System Roles - Logging
+  hosts: all
+  become: true
+  vars:
+    logging_inputs:
+      - name: "{{ logging_input_name | default('system_input') }}"
+        type: "{{ logging_input_type | default('basics') }}"
+    logging_outputs:
+      - name: "{{ logging_output_name | default('files_output') }}"
+        type: "{{ logging_output_type | default('files') }}"
+    logging_flows:
+      - name: "{{ logging_flow_name | default('flow0') }}"
+        inputs: ["{{ logging_input_name | default('system_input') }}"]
+        outputs: ["{{ logging_output_name | default('files_output') }}"]
+  roles:
+    - redhat.rhel_system_roles.logging

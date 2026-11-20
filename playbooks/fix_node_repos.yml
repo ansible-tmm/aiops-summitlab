@@ -1,0 +1,27 @@
+---
+- name: Fix node repo SSL verification
+  hosts: all
+  become: true
+  tasks:
+    - name: Disable SSL verification in redhat.repo
+      ansible.builtin.command:
+        cmd: >-
+          bash -c 'sed -i "s/sslverify = 1/sslverify = 0/g;
+          s/sslverifystatus = 1/sslverifystatus = 0/g"
+          /etc/yum.repos.d/redhat.repo'
+      changed_when: true
+      failed_when: false
+
+    - name: Set sslverify=0 globally in dnf.conf
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/dnf.conf
+        line: "sslverify=0"
+        regexp: "^sslverify"
+        state: present
+
+    - name: Set sslverifystatus=0 globally in dnf.conf
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/dnf.conf
+        line: "sslverifystatus=0"
+        regexp: "^sslverifystatus"
+        state: present

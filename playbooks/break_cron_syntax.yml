@@ -1,0 +1,23 @@
+---
+- name: Break cron with invalid syntax
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Insert invalid crontab entry
+      ansible.builtin.copy:
+        content: "INVALID SYNTAX HERE *** bad entry\n"
+        dest: /etc/cron.d/broken-job
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Restart crond to trigger config parse error
+      ansible.builtin.systemd:
+        name: crond
+        state: restarted
+
+    - name: Display status
+      ansible.builtin.debug:
+        msg: "Invalid cron entry written to /etc/cron.d/broken-job on {{ inventory_hostname }}"

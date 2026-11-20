@@ -1,0 +1,15 @@
+---
+- name: Fix cron invalid user entry
+  hosts: all
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Remove crontab with nonexistent user
+      ansible.builtin.file:
+        path: /etc/cron.d/bad-user-job
+        state: absent
+
+    - name: Display result
+      ansible.builtin.debug:
+        msg: "Removed /etc/cron.d/bad-user-job on {{ inventory_hostname }}. crond will stop logging user errors."

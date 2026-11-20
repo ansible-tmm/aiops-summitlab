@@ -1,0 +1,15 @@
+---
+- name: RHEL System Roles - Timesync
+  hosts: all
+  become: true
+  vars:
+    timesync_ntp_provider: "{{ ntp_provider | default('chrony') }}"
+    timesync_ntp_servers:
+      - hostname: "{{ ntp_server_1 | default('0.pool.ntp.org') }}"
+        pool: "{{ ntp_server_1_pool | default(true) }}"
+        iburst: "{{ ntp_server_1_iburst | default(true) }}"
+      - hostname: "{{ ntp_server_2 | default('1.pool.ntp.org') }}"
+        pool: "{{ ntp_server_2_pool | default(true) }}"
+        iburst: "{{ ntp_server_2_iburst | default(true) }}"
+  roles:
+    - redhat.rhel_system_roles.timesync

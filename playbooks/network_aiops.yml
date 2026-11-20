@@ -9,7 +9,6 @@
     gitea_repo: "lightspeed_playbooks"
     gitea_user: "lab-user"
     gitea_email: "lab-user@example.org"
-
   tasks:
     - name: Include vars
       ansible.builtin.include_vars:
