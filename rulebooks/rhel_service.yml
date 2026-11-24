@@ -2,6 +2,8 @@
 # EDA Rulebook: RHEL Cron Service
 # Listens for Splunk webhook alerts about cron failures.
 # Triggers the Cron-AIOps-Workflow (AI router -> approval -> dispatch).
+# Pass event.payload as a dict (no to_json) — EDA decision environments
+# do not ship Ansible's to_json filter; match the OSPF rulebook pattern.
 - name: "Listen for RHEL cron alerts from Splunk"
   hosts: all
 
@@ -27,5 +29,4 @@
             organization: "Default"
             job_args:
               extra_vars:
-                alert_payload: "{{ event.payload | to_json }}"
-                alert_search_name: "{{ event.payload.search_name }}"
+                webhook_payload: "{{ event.payload }}"
