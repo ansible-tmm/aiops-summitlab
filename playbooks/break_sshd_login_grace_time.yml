@@ -2,12 +2,17 @@
 # Intentionally set an insecure OpenSSH LoginGraceTime so Red Hat Lightspeed
 # Advisor flags: "Decreased security: OpenSSH LoginGraceTime settings."
 # Remediations from console.redhat.com typically set LoginGraceTime back to 1m.
+#
+# After register_lightspeed.yml, rhsm.conf points at Satellite again. Running
+# insights-client in that state fails auth — same lesson as register: flip to
+# CDN for the upload, then always restore Satellite config.
 - name: Break sshd LoginGraceTime (trigger Advisor recommendation)
   hosts: all
   gather_facts: false
   become: true
   vars:
     sshd_login_grace_time: "{{ login_grace_time | default('10m') }}"
+    rhsm_conf_backup: /etc/rhsm/rhsm.conf.pre-insights-upload
 
   tasks:
     - name: Set LoginGraceTime to an insecure value
@@ -27,16 +32,51 @@
         name: sshd
         state: restarted
 
-    - name: Upload fresh data to Red Hat Lightspeed
-      ansible.builtin.command:
-        cmd: insights-client
-      register: insights_upload
-      changed_when: true
+    - name: Upload Advisor finding to Lightspeed
+      block:
+        - name: Save current rhsm.conf before CDN flip
+          ansible.builtin.copy:
+            src: /etc/rhsm/rhsm.conf
+            dest: "{{ rhsm_conf_backup }}"
+            remote_src: true
+
+        # Must run while pointed at CDN — Satellite rhsm.conf breaks Insights auth
+        - name: Point subscription-manager at CDN for Insights upload
+          ansible.builtin.command:
+            cmd: >-
+              subscription-manager config
+              --server.hostname=subscription.rhsm.redhat.com
+              --server.prefix=/subscription
+              --server.port=443
+              --rhsm.baseurl=https://cdn.redhat.com
+          changed_when: true
+
+        - name: Upload fresh data to Red Hat Lightspeed
+          ansible.builtin.command:
+            cmd: insights-client
+          register: insights_upload
+          retries: 5
+          delay: 20
+          until: insights_upload.rc == 0
+          changed_when: true
+
+      always:
+        - name: Check rhsm.conf backup exists
+          ansible.builtin.stat:
+            path: "{{ rhsm_conf_backup }}"
+          register: rhsm_backup_stat
+
+        - name: Restore rhsm.conf after Insights upload
+          when: rhsm_backup_stat.stat.exists | default(false)
+          ansible.builtin.copy:
+            src: "{{ rhsm_conf_backup }}"
+            dest: /etc/rhsm/rhsm.conf
+            remote_src: true
 
     - name: Display result
       ansible.builtin.debug:
         msg: >-
           Set LoginGraceTime={{ sshd_login_grace_time }} on {{ inventory_hostname }}.
-          Insights upload rc={{ insights_upload.rc }}.
+          Insights upload rc={{ insights_upload.rc | default('n/a') }}.
           Advisor should show "Decreased security: OpenSSH LoginGraceTime settings"
           for this host after console.redhat.com refreshes.
